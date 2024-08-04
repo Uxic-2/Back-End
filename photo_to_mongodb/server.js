@@ -8,13 +8,21 @@ const app = express();
 // Multer 설정: 디스크에 파일을 저장
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, path.join(__dirname, 'public', 'image'));
+        const uploadDir = path.join(__dirname, 'public', 'image');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
         const userProvidedName = req.body.filename || 'default_name';
         const fileExtension = path.extname(file.originalname);
         cb(null, userProvidedName + fileExtension);
-    },
+    }
+});
+
+const upload = multer({
+    storage: storage,
     fileFilter: function (req, file, cb) {
         const ext = path.extname(file.originalname);
         if (ext !== '.png' && ext !== '.jpg' && ext !== '.jpeg') {
@@ -23,8 +31,6 @@ const storage = multer.diskStorage({
         cb(null, true);
     }
 });
-
-const upload = multer({ storage: storage });
 
 // MongoDB 연결 문자열 및 설정
 const mongoURI = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
@@ -121,13 +127,10 @@ app.get('/image/:filename', (req, res) => {
     });
 });
 
-
-
 // 주소에 해당하는 파일 정보를 조회하고 카카오맵으로 표시
 app.get('/location', (req, res) => {
     res.render('location');
 });
-
 
 // 서버 시작
 const PORT = 8080;
