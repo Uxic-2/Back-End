@@ -128,8 +128,9 @@ app.get('/image/:filename', (req, res) => {
 });
 
 // 주소에 해당하는 파일 정보를 조회하고 카카오맵으로 표시
-app.get('/location', (req, res) => {
-    res.render('location');
+app.get('/location', async (req, res) => {
+    const address = req.query.address || ''; // 쿼리 파라미터에서 주소를 가져옵니다
+    res.render('location', { address });
 });
 
 // 서버 시작
