@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Upload Image</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        /* 좋아요 수 필드를 숨기기 */
+        #likes {
+            display: none;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -22,6 +28,9 @@
                 <label for="address">Address:</label>
                 <input type="text" class="form-control" id="address" name="address">
             </div>
+            <!-- 숨겨진 좋아요 수 필드 추가 -->
+            <input type="number" class="form-control" id="likes" name="likes" value="0">
+
             <button type="submit" class="btn btn-primary mt-3">Upload</button>
         </form>
 

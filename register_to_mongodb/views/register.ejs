@@ -17,6 +17,26 @@
             <fieldset>
                 <legend>회원가입</legend>
                 <div class="mb-3">
+                    <label for="name" class="form-label">이름</label>
+                    <input type="text" id="name" class="form-control" name="name">
+                </div>
+
+                <div class="mb-3">
+                    <label for="phone" class="form-label">전화번호</label>
+                    <input type="text" id="phone" class="form-control" name="phone">
+                </div>
+
+                <div class="mb-3">
+                    <label for="birthdate" class="form-label">생년월일</label>
+                    <input type="date" id="birthdate" class="form-control" name="birthdate">
+                </div>      
+                
+                <div class="mb-3">
+                    <label for="email" class="form-label">이메일</label>
+                    <input type="email" id="email" class="form-control" name="email">
+                </div>
+
+                <div class="mb-3">
                     <label for="id" class="form-label">아이디</label>
                     <input type="text" id="id" class="form-control" name="id">
                 </div>
@@ -29,7 +49,7 @@
                         </button>
                     </div>
                 </div>
-                <button type="button" id="register" class="btn btn-outline-dark">회원가입</button>
+                <button type="submit" id="register" class="btn btn-outline-dark">회원가입</button>
                 <a href="/member/login" class="btn btn-outline-primary">뒤로</a>
                 <br><br>
                 <a href="javascript:kakaoLogin();" class="btn btn-outline-dark">
@@ -43,65 +63,108 @@
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.js"></script>
-    <script src="https://developers.kakao.com/sdk/js/kakao.js"></script>
-    <script>
-        window.Kakao.init("3585dfdc26eb8686b36cb652a1410094");
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.js"></script>
+        <script src="https://developers.kakao.com/sdk/js/kakao.js"></script>
 
-        function kakaoLogin() {
-            window.Kakao.Auth.login({
-                scope: 'profile_nickname',
-                success: function (authObj) {
-                    console.log(authObj);
-                    window.Kakao.API.request({
-                        url: 'v2/user/me',
-                        success: res => {
-                            const kakao_account = res.kakao_account;
-                            console.log(kakao_account);
-                        },
-                        fail: error => {
-                            console.error(error);
-                        }
-                    });
-                },
-                fail: error => {
-                    console.error(error);
-                }
-            });
-        }
-
-        $(document).ready(function () {
-            $('#togglePassword').click(function () {
-                const passwordField = $('#pw');
-                const eyeIcon = $('#eyeIcon');
-
-                // Toggle password visibility
-                if (passwordField.attr('type') === 'password') {
-                    passwordField.attr('type', 'text');
-                    eyeIcon.removeClass('bi-eye').addClass('bi-eye-slash');
-                } else {
-                    passwordField.attr('type', 'password');
-                    eyeIcon.removeClass('bi-eye-slash').addClass('bi-eye');
-                }
-            });
-
-            $('#register').click(() => {
-                const id = $('#id').val();
-                const pw = $('#pw').val();
-
-                $.ajax({
-                    url: '/member/register',
-                    method: 'POST',
-                    data: { id: id, pw: pw },
-                }).done((result) => {
-                    console.log(result);
-                    console.log(result.message);
-                }).fail((jqXHR, textStatus, errorThrown) => {
-                    console.error(textStatus, errorThrown);
+        <script>
+            window.Kakao.init("3585dfdc26eb8686b36cb652a1410094");
+    
+            function kakaoLogin() {
+                window.Kakao.Auth.login({
+                    scope: 'profile_nickname',
+                    success: function (authObj) {
+                        console.log(authObj);
+                        window.Kakao.API.request({
+                            url: 'v2/user/me',
+                            success: res => {
+                                const kakao_account = res.kakao_account;
+                                console.log(kakao_account);
+                            },
+                            fail: error => {
+                                console.error(error);
+                            }
+                        });
+                    },
+                    fail: error => {
+                        console.error(error);
+                    }
                 });
+            }
+    
+            $(document).ready(function () {
+                $('#togglePassword').click(function () {
+                    const passwordField = $('#pw');
+                    const eyeIcon = $('#eyeIcon');
+    
+                    // Toggle password visibility
+                    if (passwordField.attr('type') === 'password') {
+                        passwordField.attr('type', 'text');
+                        eyeIcon.removeClass('bi-eye').addClass('bi-eye-slash');
+                    } else {
+                        passwordField.attr('type', 'password');
+                        eyeIcon.removeClass('bi-eye-slash').addClass('bi-eye');
+                    }
+                });
+    
+                $('#register').click(() => {
+                    const id = $('#id').val();
+                    const pw = $('#pw').val();
+    
+                    $.ajax({
+                        url: '/member/register',
+                        method: 'POST',
+                        data: { id: id, pw: pw },
+                    }).done((result) => {
+                        console.log(result);
+                        console.log(result.message);
+                    }).fail((jqXHR, textStatus, errorThrown) => {
+                        console.error(textStatus, errorThrown);
+                    });
+                });
+            });
+        </script>
+        
+
+    <script>
+        // 비밀번호 가시성 토글
+        document.getElementById('togglePassword').addEventListener('click', function() {
+            const pwField = document.getElementById('pw');
+            const pwFieldType = pwField.getAttribute('type') === 'password' ? 'text' : 'password';
+            pwField.setAttribute('type', pwFieldType);
+
+            // 아이콘 변경
+            const eyeIcon = document.getElementById('eyeIcon');
+            eyeIcon.classList.toggle('bi-eye');
+            eyeIcon.classList.toggle('bi-eye-slash');
+        });
+
+        // 회원가입 폼 제출 시 Ajax 요청
+        document.getElementById('registerForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const formData = {
+                name: document.getElementById('name').value,
+                phone: document.getElementById('phone').value,
+                birthdate: document.getElementById('birthdate').value,
+                email: document.getElementById('email').value,
+                id: document.getElementById('id').value,
+                pw: document.getElementById('pw').value,
+            };
+
+            $.ajax({
+                type: 'POST',
+                url: '/member/register',
+                data: JSON.stringify(formData),
+                contentType: 'application/json',
+                success: function(response) {
+                    alert(response.message);
+                    window.location.href = '/member/login';
+                },
+                error: function(xhr, status, error) {
+                    alert('Registration failed: ' + xhr.responseText);
+                }
             });
         });
     </script>
 </body>
-
 </html>
