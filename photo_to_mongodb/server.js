@@ -3,6 +3,7 @@ const path = require('path');
 const multer = require('multer');
 const { MongoClient, GridFSBucket } = require('mongodb');
 const fs = require('fs');
+const Exif = require('exif').ExifImage; // exif 패키지 추가
 const app = express();
 
 // Multer 설정: 디스크에 파일을 저장
@@ -54,7 +55,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // 이미지 업로드 페이지 렌더링
 app.get('/upload', (req, res) => {
-    res.render('upload', { message: null }); // 초기 페이지 로드 시 메시지 없음
+    res.render('upload', { message: null });
 });
 
 // 이미지 업로드 처리
@@ -66,9 +67,34 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(__dirname, 'public', 'image', req.file.filename);
     const fileStream = fs.createReadStream(filePath);
 
+    // EXIF 데이터 추출
+    let exifData = {};
+    try {
+        exifData = await new Promise((resolve, reject) => {
+            new Exif({ image: filePath }, (error, exif) => {
+                if (error) {
+                    return reject(error);
+                }
+                resolve(exif);
+            });
+        });
+    } catch (error) {
+        console.error('Error extracting EXIF data:', error);
+    }
+
+    // EXIF 데이터에서 필요한 정보 추출
+    const timestamp = exifData.exif ? exifData.exif.DateTimeOriginal : 'Unknown time';
+    const gps = exifData.gps ? {
+        latitude: exifData.gps.GPSLatitude,
+        longitude: exifData.gps.GPSLongitude
+    } : { latitude: 'Unknown', longitude: 'Unknown' };
+
     const uploadStream = bucket.openUploadStream(req.body.filename || 'default_name' + path.extname(req.file.originalname), {
         metadata: {
-            address: req.body.address
+            address: req.body.address,
+            likes: parseInt(req.body.likes) || 0, // likes 필드 추가, 기본값 0
+            timestamp: timestamp,
+            gps: gps
         }
     });
     fileStream.pipe(uploadStream);
@@ -78,7 +104,6 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
             if (err) console.error('Error deleting file:', err);
         });
 
-        // 업로드 성공 메시지를 전달
         res.render('upload', { message: 'File uploaded and saved to MongoDB successfully.' });
     });
 
@@ -91,16 +116,14 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
 // 검색 페이지에 모든 사진을 보여주는 엔드포인트
 app.get('/search', async (req, res) => {
     try {
-        // MongoDB에서 'photo.files' 컬렉션을 조회하여 파일 목록을 가져옵니다.
         const photos = await db.collection('photo.files').find({}).toArray();
-        
-        // 각 파일의 정보와 메타데이터를 조회합니다.
         const photoDetails = photos.map(photo => ({
             filename: photo.filename,
-            address: photo.metadata ? photo.metadata.address : 'No address'
+            address: photo.metadata ? photo.metadata.address : 'No address',
+            likes: photo.metadata ? photo.metadata.likes : 0,
+            timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
+            gps: photo.metadata ? photo.metadata.gps : { latitude: 'Unknown', longitude: 'Unknown' }
         }));
-
-        // EJS 템플릿에 데이터를 전달하여 페이지를 렌더링합니다.
         res.render('search', { photos: photoDetails });
     } catch (err) {
         console.error('Error fetching photos:', err);
@@ -129,7 +152,7 @@ app.get('/image/:filename', (req, res) => {
 
 // 주소에 해당하는 파일 정보를 조회하고 카카오맵으로 표시
 app.get('/location', async (req, res) => {
-    const address = req.query.address || ''; // 쿼리 파라미터에서 주소를 가져옵니다
+    const address = req.query.address || '';
     res.render('location', { address });
 });
 
