@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Results</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-5">Search Results</h1>
+        <div class="row">
+            <% photos.forEach(photo => { %>
+                <div class="col-md-4">
+                    <div class="card mb-4">
+                        <img src="/image/<%= photo.filename %>" class="card-img-top" alt="<%= photo.filename %>">
+                        <div class="card-body">
+                            <h5 class="card-title"><%= photo.filename %></h5>
+                            <p class="card-text">Address: <%= photo.address %></p>
+                            <p class="card-text">Likes: <%= photo.likes %></p>
+                            <p class="card-text">Timestamp: <%= photo.timestamp %></p>
+                            <p class="card-text">GPS: Latitude <%= photo.gps.latitude %>, Longitude <%= photo.gps.longitude %></p>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    </div>
+</body>
+</html>
