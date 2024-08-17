@@ -4,13 +4,23 @@ const multer = require('multer');
 const fs = require('fs');
 const { MongoClient, GridFSBucket } = require('mongodb');
 const Exif = require('exif').ExifImage; // exif 패키지 추가
-
+const cors = require('cors');
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(cors({
+    origin: 'http://localhost:3000/', // 허용할 도메인
+    methods: ['GET', 'POST'], // 허용할 HTTP 메소드
+    allowedHeaders: ['Content-Type'], // 허용할 헤더
+}));
+
+app.listen(3000, () => {
+    console.log('Server is running on port 3000');
+});
+
 
 const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
 let db;
@@ -25,7 +35,7 @@ async function main() {
 
         console.log('Connected to database');
         app.listen(8080, () => {
-            console.log('server on port 8080');
+            console.log('server on port 3000');
         });
     } catch (error) {
         console.error('Database connection error:', error);
