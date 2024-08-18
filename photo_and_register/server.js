@@ -3,16 +3,20 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 const { MongoClient, GridFSBucket } = require('mongodb');
-const Exif = require('exif').ExifImage; // exif 패키지 추가
+const Exif = require('exif').ExifImage;
 const cors = require('cors');
 const app = express();
+
+let logindb;    // 로그인 관련 데이터베이스
+let photodb;    // 사진 관련 데이터베이스
+let photobucket; // 사진 업로드를 위한 GridFSBucket
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors({
-    origin: 'http://localhost:3000/', // 허용할 도메인
+    origin: 'http://localhost:3000', // 허용할 도메인 (슬래시 제거)
     methods: ['GET', 'POST'], // 허용할 HTTP 메소드
     allowedHeaders: ['Content-Type'], // 허용할 헤더
 }));
@@ -21,22 +25,19 @@ app.listen(3000, () => {
     console.log('Server is running on port 3000');
 });
 
-
 const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
-let db;
-let bucket;
 
 async function main() {
     try {
-        const client = new MongoClient(db_url, { useUnifiedTopology: true });
+        const client = new MongoClient(db_url);
         await client.connect();
-        db = client.db('db');  // 'db'를 데이터베이스 이름으로 사용
-        bucket = new GridFSBucket(db, { bucketName: 'photo' }); // GridFSBucket 설정
+
+        logindb = client.db('db');  // 로그인 db 연결
+        photodb = client.db('photodb'); // 사진 db 연결
+        photobucket = new GridFSBucket(photodb, { bucketName: 'photo' }); // GridFSBucket 설정
 
         console.log('Connected to database');
-        app.listen(8080, () => {
-            console.log('server on port 3000');
-        });
+        
     } catch (error) {
         console.error('Database connection error:', error);
     }
@@ -46,8 +47,8 @@ main().catch(console.error);
 
 // MongoDB 인스턴스를 라우터에서 사용 가능하게 설정
 app.use((req, res, next) => {
-    req.db = db;
-    req.bucket = bucket;
+    req.db = logindb; // 로그인 DB를 설정
+    req.bucket = photobucket; // 사진 DB 버킷을 설정
     next();
 });
 
@@ -99,7 +100,7 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
         longitude: exifData.gps.GPSLongitude
     } : { latitude: 'Unknown', longitude: 'Unknown' };
 
-    const uploadStream = bucket.openUploadStream(req.body.filename || 'default_name' + path.extname(req.file.originalname), {
+    const uploadStream = photobucket.openUploadStream(req.body.filename || 'default_name' + path.extname(req.file.originalname), {
         metadata: {
             address: req.body.address,
             likes: parseInt(req.body.likes) || 0, // likes 필드 추가, 기본값 0
@@ -123,7 +124,7 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
 // 검색 페이지에 모든 사진을 보여주는 엔드포인트
 app.get('/search', async (req, res) => {
     try {
-        const photos = await db.collection('photo.files').find({}).toArray();
+        const photos = await photodb.collection('photo.files').find({}).toArray(); // photodb 사용
         const photoDetails = photos.map(photo => ({
             filename: photo.filename,
             address: photo.metadata ? photo.metadata.address : 'No address',
@@ -146,7 +147,7 @@ app.get('/location', async (req, res) => {
 
 // 이미지 파일 조회
 app.get('/image/:filename', (req, res) => {
-    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
+    const downloadStream = photobucket.openDownloadStreamByName(req.params.filename); // photobucket 사용
     downloadStream.pipe(res);
 });
 
