@@ -38,6 +38,10 @@
         .card-text a:hover {
             text-decoration: underline;
         }
+        .card-meta {
+            font-size: 0.875rem;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -45,13 +49,21 @@
     <div class="container">
         <% photos.forEach(function(photo) { %>
             <div class="card">
-                <img src="<%= photo.imageUrl %>" alt="<%= photo.title %>" class="card-img">
+                <img src="/image/<%= photo.filename %>" alt="<%= photo.filename %>" class="card-img">
                 <div class="card-body">
-                    <h5 class="card-title"><%= photo.title %></h5>
+                    <h5 class="card-title"><%= photo.filename %></h5>
                     <p class="card-text">
                         주소: <a href="/location?address=<%= encodeURIComponent(photo.address) %>"><%= photo.address %></a>
                     </p>
-                    <p class="card-text">설명: <%= photo.description %></p>
+                    <p class="card-text">
+                        설명: <%= photo.description || 'No description' %>
+                    </p>
+                    <div class="card-meta">
+                        <p>업로드 시간: <%= photo.uploadDate %></p>
+                        <p>좋아요 수: <%= photo.likes %></p>
+                        <p>타임스탬프: <%= photo.timestamp %></p>
+                        <p>GPS: 위도 <%= photo.gps.latitude %>, 경도 <%= photo.gps.longitude %></p>
+                    </div>
                 </div>
             </div>
         <% }); %>

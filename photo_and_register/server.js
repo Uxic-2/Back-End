@@ -18,17 +18,18 @@ app.use(cors({
 }));
 
 const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
-let db;
+let db, photodb;
 let bucket;
 
 async function main() {
     try {
         const client = new MongoClient(db_url);
         await client.connect();
-        db = client.db('db');
-        bucket = new GridFSBucket(db, { bucketName: 'photo' });
+        db = client.db('db'); // 기본 db 연결
+        photodb = client.db('photodb'); // 사진을 저장할 photodb 연결
+        bucket = new GridFSBucket(photodb, { bucketName: 'photo' });
 
-        console.log('Connected to database');
+        console.log('Connected to databases');
         app.listen(3000, () => {
             console.log('Server is running on port 3000');
         });
@@ -41,6 +42,7 @@ main().catch(console.error);
 
 app.use((req, res, next) => {
     req.db = db;
+    req.photodb = photodb;
     req.bucket = bucket;
     next();
 });
@@ -116,14 +118,20 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
 
 app.get('/search', async (req, res) => {
     try {
-        const photos = await db.collection('photo.files').find({}).toArray();
+        // photodb에서 모든 사진 파일 정보를 가져옴
+        const photos = await photodb.collection('photo.files').find({}).toArray();
 
+        // 사진의 세부 정보를 변환
         const photoDetails = photos.map(photo => ({
             filename: photo.filename,
             address: photo.metadata ? photo.metadata.address : 'No address',
             likes: photo.metadata ? photo.metadata.likes : 0,
             timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
-            gps: photo.metadata ? photo.metadata.gps : { latitude: 'Unknown', longitude: 'Unknown' }
+            gps: photo.metadata ? {
+                latitude: (photo.metadata.gps && photo.metadata.gps.latitude) ? photo.metadata.gps.latitude.join(' ') : 'Unknown',
+                longitude: (photo.metadata.gps && photo.metadata.gps.longitude) ? photo.metadata.gps.longitude.join(' ') : 'Unknown'
+            } : { latitude: 'Unknown', longitude: 'Unknown' },
+            uploadDate: photo.uploadDate.toISOString() // 날짜를 ISO 형식으로 변환
         }));
 
         res.render('search', { photos: photoDetails });
@@ -133,17 +141,19 @@ app.get('/search', async (req, res) => {
     }
 });
 
+
+
 app.post('/delete-image/:filename', async (req, res) => {
     try {
         const filename = req.params.filename;
-        const file = await db.collection('photo.files').findOne({ filename: filename });
+        const file = await photodb.collection('photo.files').findOne({ filename: filename });
 
         if (!file) {
             return res.status(404).send('File not found');
         }
 
-        await db.collection('photo.files').deleteOne({ _id: file._id });
-        await db.collection('photo.chunks').deleteMany({ files_id: file._id });
+        await photodb.collection('photo.files').deleteOne({ _id: file._id });
+        await photodb.collection('photo.chunks').deleteMany({ files_id: file._id });
 
         res.redirect('/search');
     } catch (error) {
@@ -152,7 +162,6 @@ app.post('/delete-image/:filename', async (req, res) => {
     }
 });
 
-
 app.get('/image/:filename', (req, res) => {
     const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
     downloadStream.pipe(res);
@@ -160,9 +169,26 @@ app.get('/image/:filename', (req, res) => {
 
 app.use('/member', require('./routes/member.js'));
 
-module.exports = app;
+// 등록 처리 라우트 추가
+app.get('/register', (req, res) => {
+    res.render('register', { message: null });
+});
+
+app.post('/register', async (req, res) => {
+    try {
+        const { username, email } = req.body;
+        const result = await db.collection('users').insertOne({ username, email });
+
+        res.render('register', { message: 'User registered successfully!' });
+    } catch (error) {
+        console.error('Error registering user:', error);
+        res.render('register', { message: 'Error registering user.' });
+    }
+});
 
 app.get('/location', (req, res) => {
     const address = req.query.address || 'Seoul, Korea'; // 주소가 제공되지 않으면 기본값으로 'Seoul, Korea' 사용
     res.render('location', { address });
 });
+
+module.exports = app;
