@@ -117,6 +117,7 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
 app.get('/search', async (req, res) => {
     try {
         const photos = await db.collection('photo.files').find({}).toArray();
+
         const photoDetails = photos.map(photo => ({
             filename: photo.filename,
             address: photo.metadata ? photo.metadata.address : 'No address',
@@ -124,12 +125,33 @@ app.get('/search', async (req, res) => {
             timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
             gps: photo.metadata ? photo.metadata.gps : { latitude: 'Unknown', longitude: 'Unknown' }
         }));
+
         res.render('search', { photos: photoDetails });
     } catch (err) {
         console.error('Error fetching photos:', err);
         res.render('search', { photos: [] });
     }
 });
+
+app.post('/delete-image/:filename', async (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const file = await db.collection('photo.files').findOne({ filename: filename });
+
+        if (!file) {
+            return res.status(404).send('File not found');
+        }
+
+        await db.collection('photo.files').deleteOne({ _id: file._id });
+        await db.collection('photo.chunks').deleteMany({ files_id: file._id });
+
+        res.redirect('/search');
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        res.status(500).send('Error deleting file');
+    }
+});
+
 
 app.get('/image/:filename', (req, res) => {
     const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
@@ -139,3 +161,8 @@ app.get('/image/:filename', (req, res) => {
 app.use('/member', require('./routes/member.js'));
 
 module.exports = app;
+
+app.get('/location', (req, res) => {
+    const address = req.query.address || 'Seoul, Korea'; // 주소가 제공되지 않으면 기본값으로 'Seoul, Korea' 사용
+    res.render('location', { address });
+});
