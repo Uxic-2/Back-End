@@ -30,8 +30,8 @@ async function main() {
         bucket = new GridFSBucket(photodb, { bucketName: 'photo' });
 
         console.log('Connected to databases');
-        app.listen(3000, () => {
-            console.log('Server is running on port 3000');
+        app.listen(8080, () => {
+            console.log('Server is running on port 8080');
         });
     } catch (error) {
         console.error('Database connection error:', error);
