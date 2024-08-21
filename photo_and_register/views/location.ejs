@@ -129,9 +129,13 @@
         document.addEventListener('DOMContentLoaded', function() {
             var mapContainer = document.getElementById('map');
             var placesListContainer = document.getElementById('placesListContainer');
-            var address = '<%= address %>'; // 서버에서 전달받은 주소
+            var params = new URLSearchParams(window.location.search);
+            var address = params.get('address'); // 서버에서 전달받은 주소
+            var latitude = parseFloat(params.get('latitude')); // 서버에서 전달받은 위도
+            var longitude = parseFloat(params.get('longitude')); // 서버에서 전달받은 경도
+
             var mapOptions = {
-                center: new kakao.maps.LatLng(37.5665, 126.978), // 초기 위치 설정 (서울 시청)
+                center: new kakao.maps.LatLng(latitude || 37.5665, longitude || 126.978), // 위도와 경도를 기반으로 지도 중앙 설정
                 level: 3
             };
             var map = new kakao.maps.Map(mapContainer, mapOptions);
@@ -198,7 +202,7 @@
                     });
                     document.getElementById('restaurant3').addEventListener('click', function() {
                         console.log('일식 버튼 클릭됨');
-                        searchPlacesByKeyword('한식'); // 키워드 검색
+                        searchPlacesByKeyword('일식'); // 키워드 검색
                     });
                     document.getElementById('restaurant4').addEventListener('click', function() {
                         console.log('중식 버튼 클릭됨');
@@ -209,7 +213,6 @@
                     console.error('주소 검색 실패:', status);
                 }
             });
-
 
             //카테고리 검색(코드번호)
             function searchPlaces(categoryCode) {
