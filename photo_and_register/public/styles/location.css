@@ -1,0 +1,97 @@
+#map {
+    width: 100%;
+    height: 500px;
+    position: relative;
+}
+
+.buttons-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 20px 0;
+}
+
+.button-column {
+    width: 100%;
+    margin: 10px 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.button-column button {
+    display: block;
+    width: calc(33% - 20px);
+    padding: 15px;
+    font-size: 16px;
+    border: 2px solid #007bff;
+    border-radius: 5px;
+    color: #007bff;
+    background-color: #fff;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.3s, color 0.3s, border-color 0.3s;
+    margin: 10px;
+}
+
+.button-column button:hover {
+    background-color: #007bff;
+    color: #fff;
+    border-color: #0056b3;
+    transform: scale(1.05);
+}
+
+.button-column button:active {
+    background-color: #0056b3;
+    color: #fff;
+    border-color: #004494;
+    transform: scale(0.95);
+}
+
+h1 {
+    text-align: left;
+    margin-left: 20px;
+}
+
+h2 {
+    text-align: center;
+    margin: 20px 0;
+    font-size: 24px;
+}
+
+#placesList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+#placesList li {
+    margin-bottom: 10px;
+    cursor: pointer;
+}
+
+.markerbg {
+    background: url('https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_blue.png') no-repeat;
+    width: 36px;
+    height: 37px;
+    display: inline-block;
+    text-align: center;
+    line-height: 37px;
+    color: #fff;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 300px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 2px solid #ddd;
+    overflow: auto;
+    z-index: 10;
+    padding: 10px;
+}
