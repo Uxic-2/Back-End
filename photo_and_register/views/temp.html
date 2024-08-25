@@ -1,0 +1,10 @@
+var geocoder = new kakao.maps.services.Geocoder();
+var latLng = new kakao.maps.LatLng(37.5254334, 126.9348722);
+
+geocoder.coord2Address(latLng.getLng(), latLng.getLat(), function(result, status) {
+    if (status === kakao.maps.services.Status.OK) {
+        console.log('주소:', result[0].address.address_name);
+    } else {
+        console.error('주소 검색 실패:', status);
+    }
+});
