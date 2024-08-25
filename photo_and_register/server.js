@@ -6,6 +6,9 @@ const { MongoClient, GridFSBucket } = require('mongodb');
 const Exif = require('exif').ExifImage;
 const cors = require('cors');
 const app = express();
+const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
+
+require('dotenv').config();
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -17,7 +20,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type'],
 }));
 
-const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
 let db, photodb;
 let bucket;
 
@@ -30,13 +32,26 @@ async function main() {
         bucket = new GridFSBucket(photodb, { bucketName: 'photo' });
 
         console.log('Connected to databases');
-        app.listen(8080, () => {
+        app.listen(8080, () => {      
             console.log('Server is running on port 8080');
         });
     } catch (error) {
         console.error('Database connection error:', error);
     }
 }
+
+// login.ejs db 관련
+MongoClient.connect(db_url, (error, client) => {
+    if (error) {
+        return console.log(error);
+    } else {
+        app.listen(8080, () => {
+            global.db = client.db('nfp');  // nfp : 저장소 이름
+            console.log('server.on');
+        })
+    }
+})
+
 
 main().catch(console.error);
 
@@ -167,7 +182,12 @@ app.get('/image/:filename', (req, res) => {
     downloadStream.pipe(res);
 });
 
-app.use('/member', require('./routes/member.js'));
+// app.use('/member', require('./routes/member.js'));
+
+app.use('/member', (req, res, next) => {
+    req.db = db;  // 데이터베이스를 요청에 추가
+    next();
+}, require('./routes/member.js'));
 
 // 등록 처리 라우트 추가
 app.get('/register', (req, res) => {
