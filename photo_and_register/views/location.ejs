@@ -9,7 +9,6 @@
         #map {
             width: 100%;
             height: 500px;
-            position: relative;
         }
         .buttons-container {
             display: flex;
@@ -130,140 +129,97 @@
             var mapContainer = document.getElementById('map');
             var placesListContainer = document.getElementById('placesListContainer');
             var address = '<%= address %>'; // 서버에서 전달받은 주소
+            var latitude = parseFloat('<%= latitude %>') || null; // 서버에서 전달받은 위도
+            var longitude = parseFloat('<%= longitude %>') || null; // 서버에서 전달받은 경도
+            
             var mapOptions = {
-                center: new kakao.maps.LatLng(37.5665, 126.978), // 초기 위치 설정 (서울 시청)
+                center: latitude && longitude ? new kakao.maps.LatLng(latitude, longitude) : new kakao.maps.LatLng(37.5665, 126.978), // 위도와 경도가 있으면 이를 사용, 아니면 기본 서울 시청
                 level: 3
             };
+
             var map = new kakao.maps.Map(mapContainer, mapOptions);
             var infowindow = new kakao.maps.InfoWindow({ zIndex: 1 });
             var places = new kakao.maps.services.Places();
             var geocoder = new kakao.maps.services.Geocoder();
             var markers = [];
-            var centerLatLng;
+            var searchCenter = map.getCenter(); // 검색의 중심 좌표 설정
+            var searchRadius = 1000; // 검색 반경 1km로 설정
 
             // 주소로 위치를 검색하여 지도 중앙에 설정합니다.
-            geocoder.addressSearch(address, function(result, status) {
-                if (status === kakao.maps.services.Status.OK) {
-                    centerLatLng = new kakao.maps.LatLng(result[0].y, result[0].x);
-                    map.setCenter(centerLatLng);
-                    var marker = new kakao.maps.Marker({
-                        map: map,
-                        position: centerLatLng
-                    });
+            if (!latitude || !longitude) {
+                geocoder.addressSearch(address, function(result, status) {
+                    if (status === kakao.maps.services.Status.OK) {
+                        var centerLatLng = new kakao.maps.LatLng(result[0].y, result[0].x);
+                        map.setCenter(centerLatLng);
+                        searchCenter = centerLatLng; // 검색 중심 좌표 업데이트
+                        new kakao.maps.Marker({
+                            map: map,
+                            position: centerLatLng
+                        });
+                    }
+                });
+            } else {
+                // 이미 위도와 경도 정보가 있는 경우
+                var centerLatLng = new kakao.maps.LatLng(latitude, longitude);
+                map.setCenter(centerLatLng);
+                searchCenter = centerLatLng; // 검색 중심 좌표 업데이트
+                new kakao.maps.Marker({
+                    map: map,
+                    position: centerLatLng
+                });
+            }
 
-                    // 각 버튼에 이벤트 리스너 추가
-                    document.getElementById('accommodation').addEventListener('click', function() {
-                        console.log('숙소 전체 버튼 클릭됨');
-                        searchPlaces('AD5'); // 숙소 전체 카테고리 코드
-                    });
-                    document.getElementById('accommodation1').addEventListener('click', function() {
-                        console.log('호텔 버튼 클릭됨');
-                        searchPlacesByKeyword('호텔'); // 키워드 검색
-                    });
-                    document.getElementById('accommodation2').addEventListener('click', function() {
-                        console.log('모텔 버튼 클릭됨');
-                        searchPlacesByKeyword('모텔'); // 키워드 검색
-                    });
-                    document.getElementById('accommodation3').addEventListener('click', function() {
-                        console.log('펜션 버튼 클릭됨');
-                        searchPlacesByKeyword('펜션'); // 키워드 검색
-                    });
-                    document.getElementById('accommodation4').addEventListener('click', function() {
-                        console.log('리조트 버튼 클릭됨');
-                        searchPlacesByKeyword('리조트'); // 키워드 검색
-                    });
-                    document.getElementById('accommodation5').addEventListener('click', function() {
-                        console.log('캠핑 버튼 클릭됨');
-                        searchPlacesByKeyword('캠핑'); // 키워드 검색
-                    });
-                    document.getElementById('accommodation6').addEventListener('click', function() {
-                        console.log('게스트하우스 버튼 클릭됨');
-                        searchPlacesByKeyword('게스트하우스'); // 키워드 검색
-                    });
-                    document.getElementById('restaurant').addEventListener('click', function() {
-                        console.log('맛집 전체 버튼 클릭됨');
-                        searchPlaces('FD6'); // 맛집 카테고리 코드
-                    });
-                    document.getElementById('cafe').addEventListener('click', function() {
-                        console.log('카페 버튼 클릭됨');
-                        searchPlaces('CE7'); // 카페 카테고리 코드
-                    });
-                    document.getElementById('restaurant1').addEventListener('click', function() {
-                        console.log('한식 버튼 클릭됨');
-                        searchPlacesByKeyword('한식'); // 키워드 검색
-                    });
-                    document.getElementById('restaurant2').addEventListener('click', function() {
-                        console.log('양식 버튼 클릭됨');
-                        searchPlacesByKeyword('양식'); // 키워드 검색
-                    });
-                    document.getElementById('restaurant3').addEventListener('click', function() {
-                        console.log('일식 버튼 클릭됨');
-                        searchPlacesByKeyword('한식'); // 키워드 검색
-                    });
-                    document.getElementById('restaurant4').addEventListener('click', function() {
-                        console.log('중식 버튼 클릭됨');
-                        searchPlacesByKeyword('중식'); // 키워드 검색
-                    });
-
-                } else {
-                    console.error('주소 검색 실패:', status);
-                }
-            });
-
-
-            //카테고리 검색(코드번호)
             function searchPlaces(categoryCode) {
-                var radius = 1000; // 1km
-                var searchOptions = {
-                    location: centerLatLng, // 중심 좌표
-                    radius: radius // 검색 반경
-                };
-
                 places.categorySearch(categoryCode, function(data, status, pagination) {
                     if (status === kakao.maps.services.Status.OK) {
-                        displayPlaces(data); // 장소 결과 표시
-                    } else {
-                        console.error('장소 검색 실패:', status);
+                        displayPlaces(data);
                     }
-                }, searchOptions);
+                }, { 
+                    location: searchCenter, 
+                    radius: searchRadius 
+                });
             }
-            //키워드 검색
-            function searchPlacesByKeyword(keyword) {
-                var searchKeyword = address + ' ' + keyword; 
-                console.log('키워드 검색:', searchKeyword);
 
-                places.keywordSearch(searchKeyword, function(data, status, pagination) {
+            function searchPlacesByKeyword(keyword) {
+                places.keywordSearch(keyword, function(data, status, pagination) {
                     if (status === kakao.maps.services.Status.OK) {
-                        displayPlaces(data); // 장소 결과 표시
-                    } else {
-                        console.error('키워드 검색 실패:', status);
+                        displayPlaces(data);
                     }
+                }, { 
+                    location: searchCenter, 
+                    radius: searchRadius 
                 });
             }
 
             function displayPlaces(places) {
-                var listEl = document.getElementById('placesList');
-                var bounds = new kakao.maps.LatLngBounds();
-                var fragment = document.createDocumentFragment();
+                var listEl = document.getElementById('placesList'), 
+                    fragment = document.createDocumentFragment(),
+                    bounds = new kakao.maps.LatLngBounds();
+
+                placesListContainer.style.display = 'block';
 
                 removeAllChildNods(listEl);
                 removeMarker();
 
-                for (var i = 0; i < places.length; i++) {
-                    var placePosition = new kakao.maps.LatLng(places[i].y, places[i].x);
-                    var marker = addMarker(placePosition, i);
-                    var itemEl = getListItem(i, places[i]);
+                for (var i=0; i<places.length; i++) {
+                    var placePosition = new kakao.maps.LatLng(places[i].y, places[i].x),
+                        marker = addMarker(placePosition, i),
+                        itemEl = getListItem(i, places[i]);
 
                     bounds.extend(placePosition);
 
                     (function(marker, title) {
-                        kakao.maps.event.addListener(marker, 'click', function() {
+                        kakao.maps.event.addListener(marker, 'mouseover', function() {
                             displayInfowindow(marker, title);
                         });
 
-                        itemEl.onclick = function() {
-                            map.setCenter(marker.getPosition());
-                            displayInfowindow(marker, title);
+                        kakao.maps.event.addListener(marker, 'mouseout', function() {
+                            infowindow.close();
+                        });
+
+                        itemEl.onclick = function () {
+                            map.setCenter(placePosition);
+                            map.setLevel(3);
                         };
                     })(marker, places[i].place_name);
 
@@ -274,45 +230,61 @@
                 map.setBounds(bounds);
             }
 
-            function getListItem(index, place) {
-                var el = document.createElement('li');
-                el.innerHTML = '<span class="markerbg" style="background-position: 0 ' + (-46 * index) + 'px;">' + (index + 1) + '</span>' +
-                                '<div class="info">' +
-                                '   <h5>' + place.place_name + '</h5>' +
-                                (place.road_address_name ? 
-                                    '<span>' + place.road_address_name + '</span>' +
-                                    '<span class="jibun gray">' + place.address_name + '</span>':
-                                    '<span>' + place.address_name + '</span>') +
-                                '   <span class="tel">' + place.phone + '</span>' +
-                                '</div>';
+            function getListItem(index, places) {
+                var el = document.createElement('li'),
+                    itemStr = '<span class="markerbg marker_' + (index+1) + '"></span>' +
+                              '<div class="info">' +
+                              '   <h5>' + places.place_name + '</h5>';
+
+                if (places.road_address_name) {
+                    itemStr += '    <span>' + places.road_address_name + '</span>' +
+                               '   <span class="jibun gray">' +  places.address_name  + '</span>';
+                } else {
+                    itemStr += '    <span>' +  places.address_name  + '</span>'; 
+                }
+
+                itemStr += '  <span class="tel">' + places.phone  + '</span>' +
+                           '</div>';           
+
+                el.innerHTML = itemStr;
                 el.className = 'item';
+
                 return el;
             }
 
-            function addMarker(position, idx) {
-                var imageSrc = 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_blue.png',
-                    imageSize = new kakao.maps.Size(36, 37),
-                    imgOptions =  {
-                        spriteSize : new kakao.maps.Size(36, 691),
-                        spriteOrigin : new kakao.maps.Point(0, (idx * 46) + 10),
-                        offset: new kakao.maps.Point(13, 37)
-                    },
-                    markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imgOptions),
-                    marker = new kakao.maps.Marker({
-                        position: position,
-                        image: markerImage 
-                    });
+            function addMarker(position, idx, title) {
+    var imageSrc = 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_blue.png', 
+        imageSize = new kakao.maps.Size(36, 37),  
+        imgOptions =  {
+            spriteSize : new kakao.maps.Size(36, 691), 
+            spriteOrigin : new kakao.maps.Point(0, (idx * 46)), // 각 마커의 인덱스에 따라 spriteOrigin을 설정
+            offset: new kakao.maps.Point(13, 37)
+        },
+        markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imgOptions),
+        marker = new kakao.maps.Marker({
+            position: position, 
+            image: markerImage 
+        });
 
-                marker.setMap(map);
-                markers.push(marker);
-                return marker;
-            }
+    marker.setMap(map); 
+    markers.push(marker); 
+
+    return marker;
+}
+
 
             function removeMarker() {
                 for (var i = 0; i < markers.length; i++) {
                     markers[i].setMap(null);
-                }
+                }               
                 markers = [];
+            }
+
+            function displayInfowindow(marker, title) {
+                var content = '<div style="padding:5px;z-index:1;">' + title + '</div>';
+
+                infowindow.setContent(content);
+                infowindow.open(map, marker);
             }
 
             function removeAllChildNods(el) {   
@@ -321,11 +293,46 @@
                 }
             }
 
-            function displayInfowindow(marker, title) {
-                var content = '<div style="padding:5px;z-index:1;">' + title + '</div>';
-                infowindow.setContent(content);
-                infowindow.open(map, marker);
-            }
+            // 각 버튼에 이벤트 리스너 추가
+            document.getElementById('accommodation').addEventListener('click', function() {
+                searchPlacesByKeyword('숙소'); // 키워드 검색 (전체);
+            });
+            document.getElementById('accommodation1').addEventListener('click', function() {
+                searchPlacesByKeyword('호텔'); // 숙소 카테고리 코드 (호텔 예시)
+            });
+            document.getElementById('accommodation2').addEventListener('click', function() {
+                searchPlacesByKeyword('모텔'); // 숙소 카테고리 코드 (모텔 예시)
+            });
+            document.getElementById('accommodation3').addEventListener('click', function() {
+                searchPlacesByKeyword('펜션'); // 숙소 카테고리 코드 (펜션 예시)
+            });
+            document.getElementById('accommodation4').addEventListener('click', function() {
+                searchPlacesByKeyword('리조트'); // 숙소 카테고리 코드 (리조트 예시)
+            });
+            document.getElementById('accommodation5').addEventListener('click', function() {
+                searchPlacesByKeyword('캠핑'); // 숙소 카테고리 코드 (캠핑 예시)
+            });
+            document.getElementById('accommodation6').addEventListener('click', function() {
+                searchPlacesByKeyword('게스트하우스'); // 숙소 카테고리 코드 (게스트하우스 예시)
+            });
+            document.getElementById('restaurant').addEventListener('click', function() {
+                searchPlacesByKeyword('맛집'); // 키워드 검색 (전체)
+            });
+            document.getElementById('cafe').addEventListener('click', function() {
+                searchPlacesByKeyword('카페'); // 키워드 검색 (카페)
+            });
+            document.getElementById('restaurant1').addEventListener('click', function() {
+                searchPlacesByKeyword('한식'); // 키워드 검색 (한식)
+            });
+            document.getElementById('restaurant2').addEventListener('click', function() {
+                searchPlacesByKeyword('양식'); // 키워드 검색 (양식)
+            });
+            document.getElementById('restaurant3').addEventListener('click', function() {
+                searchPlacesByKeyword('일식'); // 키워드 검색 (일식)
+            });
+            document.getElementById('restaurant4').addEventListener('click', function() {
+                searchPlacesByKeyword('중식'); // 키워드 검색 (중식)
+            });
         });
     </script>
 </body>

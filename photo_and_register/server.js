@@ -83,8 +83,8 @@ app.get('/search', async (req, res) => {
             likes: photo.metadata ? photo.metadata.likes : 0,
             timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
             gps: photo.metadata ? {
-                latitude: (photo.metadata.gps && photo.metadata.gps.latitude) ? photo.metadata.gps.latitude.join(' ') : 'Unknown',
-                longitude: (photo.metadata.gps && photo.metadata.gps.longitude) ? photo.metadata.gps.longitude.join(' ') : 'Unknown'
+                latitude: photo.metadata.gps ? photo.metadata.gps.latitude : 'Unknown',
+                longitude: photo.metadata.gps ? photo.metadata.gps.longitude : 'Unknown'
             } : { latitude: 'Unknown', longitude: 'Unknown' },
             uploadDate: photo.uploadDate.toISOString()
         }));
@@ -114,7 +114,6 @@ app.get('/mypage', (req, res) => {
     }
 });
 
-
 // POST 요청 처리
 app.post('/upload', upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(uploadDir, req.file.filename);
@@ -134,10 +133,19 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
         console.error('Error extracting EXIF data:', error);
     }
 
+    // 위도와 경도 변환 함수
+    const convertDMSToDecimal = (dms, ref) => {
+        if (!dms || !ref) return 0;
+
+        const [degrees, minutes, seconds] = dms;
+        let decimal = degrees + (minutes / 60) + (seconds / 3600);
+        return (ref === 'S' || ref === 'W') ? -decimal : decimal;
+    };
+
     const timestamp = exifData.exif ? exifData.exif.DateTimeOriginal : 'Unknown time';
     const gps = exifData.gps ? {
-        latitude: exifData.gps.GPSLatitude,
-        longitude: exifData.gps.GPSLongitude
+        latitude: convertDMSToDecimal(exifData.gps.GPSLatitude, exifData.gps.GPSLatitudeRef),
+        longitude: convertDMSToDecimal(exifData.gps.GPSLongitude, exifData.gps.GPSLongitudeRef)
     } : { latitude: 'Unknown', longitude: 'Unknown' };
 
     const uploadStream = bucket.openUploadStream(req.body.filename || 'default_name' + path.extname(req.file.originalname), {
@@ -160,6 +168,7 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
             res.render('upload', { message: 'Error uploading file.' });
         });
 });
+
 app.post('/delete-image/:filename', async (req, res) => {
     try {
         const filename = req.params.filename;
