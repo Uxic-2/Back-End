@@ -13,7 +13,7 @@ app.use(express.json());
 app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors({
-    origin: 'http://localhost:3000',  
+    origin: 'http://localhost:3000',
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type'],
 }));
@@ -198,7 +198,7 @@ app.get('/location', (req, res) => {
     res.render('location', { address });
 });
 
-// mypage
+// /mypage 라우트 추가
 app.get('/mypage', (req, res) => {
     if (req.session && req.session.user) {
         // 로그인 상태인 경우
@@ -209,6 +209,24 @@ app.get('/mypage', (req, res) => {
     }
 });
 
-
+// /main 라우트 추가
+app.get('/main', (req, res) => {
+    if (req.session && req.session.user) {
+        // 로그인 상태인 경우
+        res.render('main', { user: req.session.user });
+    } else {
+        // 로그인 상태가 아닌 경우
+        res.redirect('/member/login');
+    }
+});
 
 module.exports = app;
+
+// 현재 로그인 상태를 반환하는 엔드포인트
+app.get('/auth-status', (req, res) => {
+    if (req.session && req.session.user) {
+        res.json({ loggedIn: true, user: req.session.user });
+    } else {
+        res.json({ loggedIn: false });
+    }
+});
