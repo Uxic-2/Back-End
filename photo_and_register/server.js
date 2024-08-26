@@ -5,9 +5,12 @@ const fs = require('fs');
 const { MongoClient, GridFSBucket } = require('mongodb');
 const Exif = require('exif').ExifImage;
 const cors = require('cors');
-const session = require('express-session'); // 세션 모듈 추가
+const session = require('express-session');
+const bcrypt = require('bcrypt'); // bcrypt 모듈 추가
+
 const app = express();
 
+// 공통 미들웨어 설정
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set('view engine', 'ejs');
@@ -20,22 +23,21 @@ app.use(cors({
 
 // 세션 설정
 app.use(session({
-    secret: 'your_secret_key', // 비밀 키 설정
+    secret: 'your_secret_key',
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false } // 개발 중에는 false, 실제 배포 시에는 true로 설정
+    cookie: { secure: false }
 }));
 
 const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
-let db, photodb;
-let bucket;
+let db, photodb, bucket;
 
 async function main() {
     try {
         const client = new MongoClient(db_url);
         await client.connect();
-        db = client.db('db'); // 기본 db 연결
-        photodb = client.db('photodb'); // 사진을 저장할 photodb 연결
+        db = client.db('db');
+        photodb = client.db('photodb');
         bucket = new GridFSBucket(photodb, { bucketName: 'photo' });
 
         console.log('Connected to databases');
@@ -49,6 +51,7 @@ async function main() {
 
 main().catch(console.error);
 
+// 공통 미들웨어에 DB와 GridFSBucket 추가
 app.use((req, res, next) => {
     req.db = db;
     req.photodb = photodb;
@@ -63,23 +66,56 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
 });
 const upload = multer({ storage });
 
-app.get('/', (req, res) => {
-    res.render('index.ejs');
+// GET 요청 처리
+app.get('/', (req, res) => res.render('main.ejs'));
+app.get('/upload', (req, res) => res.render('upload', { message: null }));
+app.get('/search', async (req, res) => {
+    try {
+        const photos = await photodb.collection('photo.files').find({}).toArray();
+        const photoDetails = photos.map(photo => ({
+            filename: photo.filename,
+            address: photo.metadata ? photo.metadata.address : 'No address',
+            likes: photo.metadata ? photo.metadata.likes : 0,
+            timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
+            gps: photo.metadata ? {
+                latitude: (photo.metadata.gps && photo.metadata.gps.latitude) ? photo.metadata.gps.latitude.join(' ') : 'Unknown',
+                longitude: (photo.metadata.gps && photo.metadata.gps.longitude) ? photo.metadata.gps.longitude.join(' ') : 'Unknown'
+            } : { latitude: 'Unknown', longitude: 'Unknown' },
+            uploadDate: photo.uploadDate.toISOString()
+        }));
+        res.render('search', { photos: photoDetails });
+    } catch (err) {
+        console.error('Error fetching photos:', err);
+        res.render('search', { photos: [] });
+    }
+});
+app.get('/image/:filename', (req, res) => {
+    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
+    downloadStream.pipe(res);
+});
+app.get('/location', (req, res) => {
+    const address = req.query.address || 'Seoul, Korea';
+    const latitude = parseFloat(req.query.latitude) || 37.5665;  // Default latitude for Seoul
+    const longitude = parseFloat(req.query.longitude) || 126.978; // Default longitude for Seoul
+
+    res.render('location', { address, latitude, longitude });
 });
 
-app.get('/upload', (req, res) => {
-    res.render('upload', { message: null });
+app.get('/mypage', (req, res) => {
+    if (req.session && req.session.user) {
+        res.render('mypage', { user: req.session.user });
+    } else {
+        res.redirect('/member/login');
+    }
 });
 
+
+// POST 요청 처리
 app.post('/upload', upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(uploadDir, req.file.filename);
     const fileStream = fs.createReadStream(filePath);
@@ -124,32 +160,6 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
             res.render('upload', { message: 'Error uploading file.' });
         });
 });
-
-app.get('/search', async (req, res) => {
-    try {
-        // photodb에서 모든 사진 파일 정보를 가져옴
-        const photos = await photodb.collection('photo.files').find({}).toArray();
-
-        // 사진의 세부 정보를 변환
-        const photoDetails = photos.map(photo => ({
-            filename: photo.filename,
-            address: photo.metadata ? photo.metadata.address : 'No address',
-            likes: photo.metadata ? photo.metadata.likes : 0,
-            timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
-            gps: photo.metadata ? {
-                latitude: (photo.metadata.gps && photo.metadata.gps.latitude) ? photo.metadata.gps.latitude.join(' ') : 'Unknown',
-                longitude: (photo.metadata.gps && photo.metadata.gps.longitude) ? photo.metadata.gps.longitude.join(' ') : 'Unknown'
-            } : { latitude: 'Unknown', longitude: 'Unknown' },
-            uploadDate: photo.uploadDate.toISOString() // 날짜를 ISO 형식으로 변환
-        }));
-
-        res.render('search', { photos: photoDetails });
-    } catch (err) {
-        console.error('Error fetching photos:', err);
-        res.render('search', { photos: [] });
-    }
-});
-
 app.post('/delete-image/:filename', async (req, res) => {
     try {
         const filename = req.params.filename;
@@ -169,58 +179,81 @@ app.post('/delete-image/:filename', async (req, res) => {
     }
 });
 
-app.get('/image/:filename', (req, res) => {
-    const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
-    downloadStream.pipe(res);
+// 로그인 페이지 렌더링
+app.get('/member/login', (req, res) => {
+    res.render('login.ejs');
 });
 
-app.use('/member', require('./routes/member.js'));
+// 로그인 데이터 처리
+app.post('/member/login', async (req, res) => {
+    const { id, pw } = req.body;
 
-// 등록 처리 라우트 추가
-app.get('/register', (req, res) => {
-    res.render('register', { message: null });
-});
-
-app.post('/register', async (req, res) => {
     try {
-        const { username, email } = req.body;
-        const result = await db.collection('users').insertOne({ username, email });
+        const user = await db.collection('users').findOne({ id });
 
-        res.render('register', { message: 'User registered successfully!' });
+        if (!user) {
+            return res.redirect('/member/login?error=' + encodeURIComponent('없는 아이디 입니다.'));
+        }
+
+        const isMatch = await bcrypt.compare(pw, user.pw);
+
+        if (!isMatch) {
+            return res.redirect('/member/login?error=' + encodeURIComponent('비밀번호가 잘못되었습니다.'));
+        }
+
+        req.session.user = { id: user.id };
+
+        res.redirect('/');
     } catch (error) {
-        console.error('Error registering user:', error);
-        res.render('register', { message: 'Error registering user.' });
+        console.error('Error during login:', error);
+        res.status(500).send({ message: 'Server error' });
     }
 });
 
-app.get('/location', (req, res) => {
-    const address = req.query.address || 'Seoul, Korea'; // 주소가 제공되지 않으면 기본값으로 'Seoul, Korea' 사용
-    res.render('location', { address });
+// 로그아웃 처리
+app.get('/member/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            console.error('Error destroying session:', err);
+            return res.status(500).send('Error logging out.');
+        }
+        res.redirect('/');
+    });
 });
 
-// /mypage 라우트 추가
-app.get('/mypage', (req, res) => {
-    if (req.session && req.session.user) {
-        // 로그인 상태인 경우
-        res.render('mypage', { user: req.session.user });
-    } else {
-        // 로그인 상태가 아닌 경우
-        res.redirect('/member/login');
+// 회원가입 페이지 렌더링
+app.get('/member/register', (req, res) => {
+    res.render('register.ejs');
+});
+
+// 회원가입 데이터 처리
+app.post('/member/register', async (req, res) => {
+    const { name, phone, birthdate, email, id, pw } = req.body;
+
+    if (!name || !phone || !birthdate || !email || !id || !pw) {
+        return res.status(400).send({ message: 'All fields are required' });
+    }
+
+    try {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(pw, salt);
+
+        const result = await db.collection('users').insertOne({
+            name,
+            phone,
+            birthdate,
+            email,
+            id,
+            pw: hashedPassword
+        });
+
+        console.log('User registered:', result.insertedId);
+        res.status(200).send({ message: 'User registered successfully' });
+    } catch (error) {
+        console.error('Database Insert Error:', error);
+        res.status(500).send({ message: 'Database Insert Error' });
     }
 });
-
-// /main 라우트 추가
-app.get('/main', (req, res) => {
-    if (req.session && req.session.user) {
-        // 로그인 상태인 경우
-        res.render('main', { user: req.session.user });
-    } else {
-        // 로그인 상태가 아닌 경우
-        res.redirect('/member/login');
-    }
-});
-
-module.exports = app;
 
 // 현재 로그인 상태를 반환하는 엔드포인트
 app.get('/auth-status', (req, res) => {
@@ -230,3 +263,5 @@ app.get('/auth-status', (req, res) => {
         res.json({ loggedIn: false });
     }
 });
+
+module.exports = app;
