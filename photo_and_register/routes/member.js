@@ -48,7 +48,7 @@ router.post('/login', async (req, res) => {
         
         if (!user) {
             // 사용자 찾을 수 없음
-            return res.status(400).send({ message: 'Invalid credentials' });
+            return res.redirect('/member/login?error=' +  encodeURIComponent('없는 아이디 입니다.')); // 아이디 오류시 문구 출력
         }
 
         // 암호 대조
@@ -56,16 +56,31 @@ router.post('/login', async (req, res) => {
         
         if (!isMatch) {
             // 비밀번호 불일치
-            return res.status(400).send({ message: 'Invalid credentials' });
+            return res.redirect('/member/login?error=' + encodeURIComponent('비밀번호가 잘못되었습니다.')); // 비밀번호 오류시 문구 출력
         }
 
-        // 로그인 성공 - search 페이지로 다이렉션
-        res.redirect('/search');
+        // 로그인 성공 시 세션에 사용자 정보 저장
+        req.session.user = { id: user.id };
+
+        // 로그인 성공 - main 페이지로 다이렉션
+        res.redirect('/main');
     } catch (error) {
         console.error('Error during login:', error);
         res.status(500).send({ message: 'Server error' });
     }
 });
+
+router.get('/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            console.error('Error destroying session:', err);
+            return res.status(500).send('Error logging out.');
+        }
+        res.redirect('/main');
+    });
+});
+
+
 
 // 회원가입 페이지 렌더링
 router.get('/register', (req, res) => {
