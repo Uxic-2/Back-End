@@ -30,6 +30,9 @@
             </div>
             <!-- 숨겨진 좋아요 수 필드 추가 -->
             <input type="number" class="form-control" id="likes" name="likes" value="0">
+            <!-- 숨겨진 위도 및 경도 필드 추가 -->
+            <input type="hidden" id="latitude" name="latitude">
+            <input type="hidden" id="longitude" name="longitude">
 
             <button type="submit" class="btn btn-primary mt-3">Upload</button>
         </form>
@@ -40,5 +43,34 @@
         </div>
         <% } %>
     </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+    <script>
+        document.getElementById('uploadImg').addEventListener('change', function(event) {
+            var file = event.target.files[0];
+            if (file) {
+                EXIF.getData(file, function() {
+                    var lat = EXIF.getTag(this, "GPSLatitude");
+                    var latRef = EXIF.getTag(this, "GPSLatitudeRef");
+                    var lon = EXIF.getTag(this, "GPSLongitude");
+                    var lonRef = EXIF.getTag(this, "GPSLongitudeRef");
+
+                    var latitude = convertDMSToDecimal(lat, latRef);
+                    var longitude = convertDMSToDecimal(lon, lonRef);
+
+                    // 폼 데이터에 위도와 경도 추가
+                    document.getElementById('latitude').value = latitude;
+                    document.getElementById('longitude').value = longitude;
+                });
+            }
+        });
+
+        function convertDMSToDecimal(dms, ref) {
+            if (!dms || !ref) return 0;
+
+            var [degrees, minutes, seconds] = dms;
+            var decimal = degrees + (minutes / 60) + (seconds / 3600);
+            return ref === 'S' || ref === 'W' ? -decimal : decimal;
+        }
+    </script>
 </body>
 </html>
