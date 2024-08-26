@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Page</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+        .wrapper {
+            display: flex;
+            flex: 1;
+        }
+        .sidebar {
+            width: 250px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            height: 100vh;
+        }
+        .content {
+            flex: 1;
+            padding: 20px;
+        }
+        .sidebar a {
+            display: block;
+            padding: 10px 15px;
+            margin: 5px 0;
+            color: #000;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .sidebar a:hover {
+            background-color: #e2e6ea;
+        }
+    </style>
+</head>
+<body>
+    <!-- 네비게이션 바 -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/main">My Website</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/about">ABOUT</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/hotspot">HOT SPOT</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/support">SUPPORT</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/mypage">MY PAGE</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="authLink" href="#">LOG IN</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 메인 콘텐츠 영역 -->
+    <div class="wrapper">
+        <!-- 좌측 내비게이션 바 -->
+        <div class="sidebar">
+            <h4>My Page</h4>
+            <a href="/mypage/map">내 지도</a>
+            <a href="/mypage/folder">내 여행 폴더</a>
+            <a href="/mypage/saved-schedule">저장한 스케줄</a>
+        </div>
+
+        <!-- 콘텐츠 영역 -->
+        <div class="content">
+            <h1>Welcome <%= user.id %>님, 사실 별로 환영 안해</h1>
+            <p>이곳에서 당신의 노가다를 표출하세요.</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // 로그인 상태에 따라 네비게이션 바의 로그인/로그아웃 링크를 업데이트
+        fetch('/auth-status')
+            .then(response => response.json())
+            .then(data => {
+                const authLink = document.getElementById('authLink');
+                
+                if (data.loggedIn) {
+                    authLink.textContent = 'LOG OUT';
+                    authLink.href = '/member/logout';
+                } else {
+                    authLink.textContent = 'LOG IN';
+                    authLink.href = '/member/login';
+                }
+            });
+    </script>
+</body>
+</html>

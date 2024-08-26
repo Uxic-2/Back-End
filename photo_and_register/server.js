@@ -198,13 +198,17 @@ app.get('/location', (req, res) => {
     res.render('location', { address });
 });
 
-// 추가된 /main 라우트
-app.get('/main', (req, res) => {
-    if (req.session.user) {
-        res.render('main'); // main.ejs 파일을 렌더링
+// mypage
+app.get('/mypage', (req, res) => {
+    if (req.session && req.session.user) {
+        // 로그인 상태인 경우
+        res.render('mypage', { user: req.session.user });
     } else {
-        res.redirect('/member/login?error=' + encodeURIComponent('로그인이 필요합니다.'));
+        // 로그인 상태가 아닌 경우
+        res.redirect('/member/login');
     }
 });
+
+
 
 module.exports = app;
