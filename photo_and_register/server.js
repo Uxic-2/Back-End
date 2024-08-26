@@ -246,4 +246,18 @@ app.get('/location', (req, res) => {
     res.render('location', { address });
 });
 
+
+
+// mypage
+app.get('/mypage', (req, res) => {
+    if (req.session && req.session.user) {
+        // 로그인 상태인 경우
+        res.render('mypage', { user: req.session.user });
+    } else {
+        // 로그인 상태가 아닌 경우
+        res.redirect('/member/login');
+    }
+});
+
+
 module.exports = app;

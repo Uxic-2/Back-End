@@ -8,37 +8,6 @@ router.get('/login', (req, res) => {
 });
 
 // 로그인 데이터 처리
-// router.post('/login', async (req, res) => {
-//     db.collection('login').findOne({id: id}, (error, result)=>{
-//         if(result) {
-//             let enc_pw = result.pw;
-//             bcrypt.compare(pw, enc_pw, (error, result)=>{
-//                 try{
-//                     if(result) {
-//                         res.send({
-//                             code: 1
-//                         });
-//                     } else {
-//                         res.send({
-//                             code: 0
-//                         });
-//                     }
-//                 } catch(err) {
-//                     console.log(err);
-//                     res.send({
-//                         code: 0
-//                     });
-//                 }
-//             })
-//         } else {
-//             res.send({
-//                 code: 0
-//             });
-//         }
-//     })
-// });
-
-// 로그인 데이터 처리
 router.post('/login', async (req, res) => {
     const { id, pw } = req.body;
 
@@ -79,8 +48,6 @@ router.get('/logout', (req, res) => {
         res.redirect('/main');
     });
 });
-
-
 
 // 회원가입 페이지 렌더링
 router.get('/register', (req, res) => {
