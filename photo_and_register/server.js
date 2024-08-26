@@ -6,6 +6,19 @@ const { MongoClient, GridFSBucket } = require('mongodb');
 const Exif = require('exif').ExifImage;
 const cors = require('cors');
 const app = express();
+const session = require('express-session');
+const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
+
+require('dotenv').config();
+
+// 세션 미들웨어 설정(LOGIN/LOGOUT)
+app.use(session({
+    secret: '1111', // 세션 암호화를 위한 비밀키
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false } // HTTPS를 사용하지 않는 경우 false로 설정
+}));
+
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -17,7 +30,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type'],
 }));
 
-const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
 let db, photodb;
 let bucket;
 
@@ -30,13 +42,26 @@ async function main() {
         bucket = new GridFSBucket(photodb, { bucketName: 'photo' });
 
         console.log('Connected to databases');
-        app.listen(8080, () => {
+        app.listen(8080, () => {      
             console.log('Server is running on port 8080');
         });
     } catch (error) {
         console.error('Database connection error:', error);
     }
 }
+
+// login.ejs db 관련
+MongoClient.connect(db_url, (error, client) => {
+    if (error) {
+        return console.log(error);
+    } else {
+        app.listen(8080, () => {
+            global.db = client.db('nfp');  // nfp : 저장소 이름
+            console.log('server.on');
+        })
+    }
+})
+
 
 main().catch(console.error);
 
@@ -62,6 +87,31 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage });
+
+
+// 로그인 상태를 확인하는 API(main페이지)
+app.get('/auth-status', (req, res) => {
+    const loggedIn = req.session && req.session.user; // 세션에 user 정보가 있으면 로그인 상태로 간주
+    // console.log("Auth status check: ", loggedIn); // 로그인 상태 확인 로그 추가(없애도됨 확인용 로그)
+    res.json({ loggedIn });
+});
+
+// main 페이지 렌더링
+app.get('/main', (req, res) => {
+    res.render('main'); // main.ejs 렌더링
+});
+
+// 로그아웃 설정
+app.get('/member/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            console.error('Error destroying session:', err);
+            return res.status(500).send('Error logging out.');
+        }
+        res.redirect('/main'); // 로그아웃 후 메인 페이지로 리다이렉트
+    });
+});
+
 
 app.get('/', (req, res) => {
     res.render('index.ejs');
@@ -167,7 +217,12 @@ app.get('/image/:filename', (req, res) => {
     downloadStream.pipe(res);
 });
 
-app.use('/member', require('./routes/member.js'));
+// app.use('/member', require('./routes/member.js'));
+
+app.use('/member', (req, res, next) => {
+    req.db = db;  // 데이터베이스를 요청에 추가
+    next();
+}, require('./routes/member.js'));
 
 // 등록 처리 라우트 추가
 app.get('/register', (req, res) => {
