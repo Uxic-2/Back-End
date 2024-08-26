@@ -105,6 +105,7 @@
                         eyeIcon.removeClass('bi-eye-slash').addClass('bi-eye');
                     }
                 });
+    
                 $('#register').click(() => {
                     const id = $('#id').val();
                     const pw = $('#pw').val();
@@ -119,8 +120,8 @@
                     }).fail((jqXHR, textStatus, errorThrown) => {
                         console.error(textStatus, errorThrown);
                     });
-                })
-            })   
+                });
+            });
         </script>
         
 
