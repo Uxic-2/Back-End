@@ -6,11 +6,7 @@ const { MongoClient, GridFSBucket } = require('mongodb');
 const Exif = require('exif').ExifImage;
 const cors = require('cors');
 const session = require('express-session');
-<<<<<<< HEAD
-const bcrypt = require('bcrypt');
-=======
 const bcrypt = require('bcrypt'); // bcrypt 모듈 추가
->>>>>>> 05da43374affebf096bc713d8701052802273d84
 
 const app = express();
 
@@ -25,6 +21,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type'],
 }));
 
+// 세션 설정
 app.use(session({
     secret: 'your_secret_key',
     resave: false,
@@ -62,6 +59,7 @@ app.use((req, res, next) => {
     next();
 });
 
+// Ensure the upload directory exists
 const uploadDir = path.join(__dirname, 'public', 'image');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -73,10 +71,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-<<<<<<< HEAD
-=======
 // GET 요청 처리
->>>>>>> 05da43374affebf096bc713d8701052802273d84
 app.get('/', (req, res) => res.render('main.ejs'));
 app.get('/upload', (req, res) => res.render('upload', { message: null }));
 app.get('/search', async (req, res) => {
@@ -105,13 +100,8 @@ app.get('/image/:filename', (req, res) => {
 });
 app.get('/location', (req, res) => {
     const address = req.query.address || 'Seoul, Korea';
-<<<<<<< HEAD
-    const latitude = parseFloat(req.query.latitude) || 37.5665;
-    const longitude = parseFloat(req.query.longitude) || 126.978;
-=======
     const latitude = parseFloat(req.query.latitude) || 37.5665;  // Default latitude for Seoul
     const longitude = parseFloat(req.query.longitude) || 126.978; // Default longitude for Seoul
->>>>>>> 05da43374affebf096bc713d8701052802273d84
 
     res.render('location', { address, latitude, longitude });
 });
@@ -143,10 +133,7 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
         console.error('Error extracting EXIF data:', error);
     }
 
-<<<<<<< HEAD
-=======
     // 위도와 경도 변환 함수
->>>>>>> 05da43374affebf096bc713d8701052802273d84
     const convertDMSToDecimal = (dms, ref) => {
         if (!dms || !ref) return 0;
 
@@ -201,18 +188,12 @@ app.post('/delete-image/:filename', async (req, res) => {
     }
 });
 
-<<<<<<< HEAD
-=======
 // 로그인 페이지 렌더링
->>>>>>> 05da43374affebf096bc713d8701052802273d84
 app.get('/member/login', (req, res) => {
     res.render('login.ejs');
 });
 
-<<<<<<< HEAD
-=======
 // 로그인 데이터 처리
->>>>>>> 05da43374affebf096bc713d8701052802273d84
 app.post('/member/login', async (req, res) => {
     const { id, pw } = req.body;
 
@@ -238,10 +219,7 @@ app.post('/member/login', async (req, res) => {
     }
 });
 
-<<<<<<< HEAD
-=======
 // 로그아웃 처리
->>>>>>> 05da43374affebf096bc713d8701052802273d84
 app.get('/member/logout', (req, res) => {
     req.session.destroy(err => {
         if (err) {
@@ -252,18 +230,12 @@ app.get('/member/logout', (req, res) => {
     });
 });
 
-<<<<<<< HEAD
-=======
 // 회원가입 페이지 렌더링
->>>>>>> 05da43374affebf096bc713d8701052802273d84
 app.get('/member/register', (req, res) => {
     res.render('register.ejs');
 });
 
-<<<<<<< HEAD
-=======
 // 회원가입 데이터 처리
->>>>>>> 05da43374affebf096bc713d8701052802273d84
 app.post('/member/register', async (req, res) => {
     const { name, phone, birthdate, email, id, pw } = req.body;
 
@@ -272,25 +244,6 @@ app.post('/member/register', async (req, res) => {
     }
 
     try {
-<<<<<<< HEAD
-        const existingUser = await db.collection('users').findOne({ id });
-
-        if (existingUser) {
-            return res.status(400).send({ message: 'User ID already exists' });
-        }
-
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(pw, salt);
-
-        await db.collection('users').insertOne({
-            name, phone, birthdate, email, id, pw: hashedPassword
-        });
-
-        res.status(200).send({ message: 'User registered successfully' });
-    } catch (error) {
-        console.error('Error during registration:', error);
-        res.status(500).send({ message: 'Server error' });
-=======
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(pw, salt);
 
@@ -317,7 +270,6 @@ app.get('/auth-status', (req, res) => {
         res.json({ loggedIn: true, user: req.session.user });
     } else {
         res.json({ loggedIn: false });
->>>>>>> 05da43374affebf096bc713d8701052802273d84
     }
 });
 
