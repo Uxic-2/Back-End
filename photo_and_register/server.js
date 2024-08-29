@@ -6,11 +6,10 @@ const { MongoClient, GridFSBucket } = require('mongodb');
 const Exif = require('exif').ExifImage;
 const cors = require('cors');
 const session = require('express-session');
-const bcrypt = require('bcrypt'); // bcrypt 모듈 추가
+const bcrypt = require('bcrypt');
 
 const app = express();
 
-// 공통 미들웨어 설정
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.set('view engine', 'ejs');
@@ -21,7 +20,6 @@ app.use(cors({
     allowedHeaders: ['Content-Type'],
 }));
 
-// 세션 설정
 app.use(session({
     secret: 'your_secret_key',
     resave: false,
@@ -51,7 +49,6 @@ async function main() {
 
 main().catch(console.error);
 
-// 공통 미들웨어에 DB와 GridFSBucket 추가
 app.use((req, res, next) => {
     req.db = db;
     req.photodb = photodb;
@@ -59,7 +56,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// Ensure the upload directory exists
 const uploadDir = path.join(__dirname, 'public', 'image');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -71,7 +67,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// GET 요청 처리
 app.get('/', (req, res) => res.render('main.ejs'));
 app.get('/upload', (req, res) => res.render('upload', { message: null }));
 app.get('/search', async (req, res) => {
@@ -100,8 +95,8 @@ app.get('/image/:filename', (req, res) => {
 });
 app.get('/location', (req, res) => {
     const address = req.query.address || 'Seoul, Korea';
-    const latitude = parseFloat(req.query.latitude) || 37.5665;  // Default latitude for Seoul
-    const longitude = parseFloat(req.query.longitude) || 126.978; // Default longitude for Seoul
+    const latitude = parseFloat(req.query.latitude) || 37.5665;
+    const longitude = parseFloat(req.query.longitude) || 126.978;
 
     res.render('location', { address, latitude, longitude });
 });
@@ -114,7 +109,6 @@ app.get('/mypage', (req, res) => {
     }
 });
 
-// POST 요청 처리
 app.post('/upload', upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(uploadDir, req.file.filename);
     const fileStream = fs.createReadStream(filePath);
@@ -133,7 +127,6 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
         console.error('Error extracting EXIF data:', error);
     }
 
-    // 위도와 경도 변환 함수
     const convertDMSToDecimal = (dms, ref) => {
         if (!dms || !ref) return 0;
 
@@ -188,12 +181,10 @@ app.post('/delete-image/:filename', async (req, res) => {
     }
 });
 
-// 로그인 페이지 렌더링
 app.get('/member/login', (req, res) => {
     res.render('login.ejs');
 });
 
-// 로그인 데이터 처리
 app.post('/member/login', async (req, res) => {
     const { id, pw } = req.body;
 
@@ -219,7 +210,6 @@ app.post('/member/login', async (req, res) => {
     }
 });
 
-// 로그아웃 처리
 app.get('/member/logout', (req, res) => {
     req.session.destroy(err => {
         if (err) {
@@ -230,12 +220,10 @@ app.get('/member/logout', (req, res) => {
     });
 });
 
-// 회원가입 페이지 렌더링
 app.get('/member/register', (req, res) => {
     res.render('register.ejs');
 });
 
-// 회원가입 데이터 처리
 app.post('/member/register', async (req, res) => {
     const { name, phone, birthdate, email, id, pw } = req.body;
 
@@ -244,33 +232,22 @@ app.post('/member/register', async (req, res) => {
     }
 
     try {
+        const existingUser = await db.collection('users').findOne({ id });
+
+        if (existingUser) {
+            return res.status(400).send({ message: 'User ID already exists' });
+        }
+
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(pw, salt);
 
-        const result = await db.collection('users').insertOne({
-            name,
-            phone,
-            birthdate,
-            email,
-            id,
-            pw: hashedPassword
+        await db.collection('users').insertOne({
+            name, phone, birthdate, email, id, pw: hashedPassword
         });
 
-        console.log('User registered:', result.insertedId);
         res.status(200).send({ message: 'User registered successfully' });
     } catch (error) {
-        console.error('Database Insert Error:', error);
-        res.status(500).send({ message: 'Database Insert Error' });
+        console.error('Error during registration:', error);
+        res.status(500).send({ message: 'Server error' });
     }
 });
-
-// 현재 로그인 상태를 반환하는 엔드포인트
-app.get('/auth-status', (req, res) => {
-    if (req.session && req.session.user) {
-        res.json({ loggedIn: true, user: req.session.user });
-    } else {
-        res.json({ loggedIn: false });
-    }
-});
-
-module.exports = app;
