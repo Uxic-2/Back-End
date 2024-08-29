@@ -7,6 +7,7 @@ const Exif = require('exif').ExifImage;
 const cors = require('cors');
 const session = require('express-session');
 const bcrypt = require('bcrypt'); // bcrypt 모듈 추가
+// const bcrypt = require('bcryptjs'); // bcrypt 모듈 추가
 
 const app = express();
 
@@ -195,7 +196,7 @@ app.get('/member/login', (req, res) => {
 
 // 로그인 데이터 처리
 app.post('/member/login', async (req, res) => {
-    const { id, pw } = req.body;
+    const { name, id, pw } = req.body;
 
     try {
         const user = await db.collection('users').findOne({ id });
@@ -211,6 +212,7 @@ app.post('/member/login', async (req, res) => {
         }
 
         req.session.user = { id: user.id };
+        req.session.user = { name: user.name};
 
         res.redirect('/');
     } catch (error) {
