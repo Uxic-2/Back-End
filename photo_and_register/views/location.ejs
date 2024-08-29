@@ -272,7 +272,12 @@
                         return {
                             name: place.place_name,
                             address: place.road_address_name || place.address_name,
-                            phone: place.phone
+                            category: place.category_group_name,
+                            distance: place.distance,
+                            phone: place.phone,
+                            url: place.place_url,
+                            latitude: place.x,
+                            longitude: place.y
                         };
                     }));
                 } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
@@ -395,7 +400,15 @@
                     listItem.innerHTML = `
                         <h4>${detail.name}</h4>
                         <p>주소: ${detail.address}</p>
+                        <p>카테고리: ${detail.category}</p>
+                        <p>거리: ${detail.distance}</p>
                         <p>전화번호: ${detail.phone ? detail.phone : '없음'}</p>
+                        <p>링크: ${detail.url ? `<a href="${detail.url}" target="_blank">${detail.url}</a>` : '없음'}</p>
+                        <p>위도: ${detail.latitude}</p>
+                        <p>경도: ${detail.longitude}</p>
+                        
+                            
+                     
                     `;
                     detailList.appendChild(listItem);
                 });
