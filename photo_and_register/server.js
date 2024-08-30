@@ -80,7 +80,20 @@ const ensureAuthenticated = (req, res, next) => {
 // GET 요청 처리
 app.get('/', (req, res) => res.render('main.ejs'));
 
-app.get('/upload', ensureAuthenticated, (req, res) => res.render('upload', { message: null }));
+app.get('/upload', ensureAuthenticated, async (req, res) => {
+    try {
+        // 파일 목록 가져오기
+        const photos = await db.collection('photo.files').find({}).toArray();
+        const photoDetails = photos.map(photo => ({
+            filename: photo.filename,
+        }));
+
+        res.render('upload', { message: null, photos: photoDetails });
+    } catch (err) {
+        console.error('Error fetching photos:', err);
+        res.render('upload', { message: 'Error fetching photos.', photos: [] });
+    }
+});
 
 app.get('/search', ensureAuthenticated, async (req, res) => {
     try {
@@ -188,6 +201,12 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
                 { id: userId },
                 { $push: { uploaded_photoid: uploadedFileId } }
             );
+            const photos = await db.collection('photo.files').find({}).toArray();
+            const photoDetails = photos.map(photo => ({
+                filename: photo.filename,
+            }));
+
+            
             res.render('upload', { message: 'File uploaded and saved to MongoDB successfully.' });
         } catch (error) {
             console.error('Error updating user uploaded_photoid:', error);
@@ -359,6 +378,29 @@ app.post('/places/:action', async (req, res) => {
         return res.status(500).send({ message: 'Internal server error' });
     }
 });
+// 사진 삭제 처리
+app.get('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const file = await db.collection('photo.files').findOne({ filename: filename });
 
+        if (!file) {
+            return res.status(404).send('File not found');
+        }
 
+        await db.collection('photo.files').deleteOne({ _id: file._id });
+        await db.collection('photo.chunks').deleteMany({ files_id: file._id });
+
+        // 파일 삭제 후 사진 목록 가져오기
+        const photos = await db.collection('photo.files').find({}).toArray();
+        const photoDetails = photos.map(photo => ({
+            filename: photo.filename,
+        }));
+
+        res.render('upload', { message: 'File deleted successfully.', photos: photoDetails });
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        res.status(500).send('Error deleting file');
+    }
+});
 module.exports = app;
