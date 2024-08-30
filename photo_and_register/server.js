@@ -108,14 +108,24 @@ app.get('/image/:filename', ensureAuthenticated, (req, res) => {
     downloadStream.pipe(res);
 });
 
-app.get('/location', ensureAuthenticated, (req, res) => {
+// /location 경로 수정
+app.get('/location', async (req, res) => {
     const address = req.query.address || 'Seoul, Korea';
-    const latitude = parseFloat(req.query.latitude) || 37.5665;  // Default latitude for Seoul
-    const longitude = parseFloat(req.query.longitude) || 126.978; // Default longitude for Seoul
-    const userId = req.session.user ? req.session.user.id : null; // 세션에서 사용자 ID 가져오기
+    const latitude = parseFloat(req.query.latitude) || 37.5665;
+    const longitude = parseFloat(req.query.longitude) || 126.978;
+    const userId = req.session.user ? req.session.user.id : null;
 
-    res.render('location', { address, latitude, longitude, userId });
+    try {
+        const user = await db.collection('users').findOne({ id: userId });
+        const likedPlaceIds = user ? user.liked_placeid : [];
+
+        res.render('location', { address, latitude, longitude, userId, likedPlaceIds });
+    } catch (err) {
+        console.error('Error fetching user data:', err);
+        res.render('location', { address, latitude, longitude, userId, likedPlaceIds: [] });
+    }
 });
+
 
 app.get('/mypage', ensureAuthenticated, (req, res) => {
     res.render('mypage', { user: req.session.user });
@@ -314,9 +324,11 @@ app.post('/places/:action', async (req, res) => {
 
         if (update) {
             await db.collection('users').updateOne({ id: userId }, update);
+            const updatedUser = await db.collection('users').findOne({ id: userId });
+            return res.status(200).send({ message: 'Success', liked_placeid: updatedUser.liked_placeid });
+        } else {
+            return res.status(200).send({ message: 'No change' });
         }
-
-        return res.status(200).send({ message: 'Success', liked_placeid: user.liked_placeid });
     } catch (error) {
         console.error('Error updating liked places:', error);
         return res.status(500).send({ message: 'Internal server error' });
