@@ -340,32 +340,35 @@
             }
 
             // 체크박스 클릭 이벤트 처리 함수
-            function handleCheckboxClick(placeId, userId, isChecked) {
-                var url = isChecked ? '/places/add' : '/places/remove';
-                var data = {
-                    placeId: placeId,
-                    userId: userId
-                };
+            // 체크박스 클릭 이벤트 처리 함수
+function handleCheckboxClick(placeId, userId, isChecked) {
+    var action = isChecked ? 'add' : 'remove'; // add 또는 remove 결정
+    var url = `/places/${action}`;
+    var data = {
+        placeId: placeId,
+        userId: userId
+    };
 
-                fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                })
-                .then(response => response.json())
-                .then(result => {
-                    if (result.success) {
-                        console.log('요청 성공:', result);
-                    } else {
-                        console.error('요청 실패:', result);
-                    }
-                })
-                .catch(error => {
-                    console.error('요청 오류:', error);
-                });
-            }
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.message === 'Success') {
+            console.log('요청 성공:', result);
+        } else {
+            console.error('요청 실패:', result);
+        }
+    })
+    .catch(error => {
+        console.error('요청 오류:', error);
+    });
+}
+
 
             // 정보창을 표시하는 함수
             function displayInfowindow(marker, title) {

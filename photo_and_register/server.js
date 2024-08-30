@@ -283,8 +283,9 @@ app.get('/auth-status', (req, res) => {
 });
 
 // 장소 좋아요 추가 및 삭제 라우트
-app.post('/location/', async (req, res) => {
-    const { placeId, userId, action } = req.body;
+app.post('/places/:action', async (req, res) => {
+    const { placeId, userId } = req.body;
+    const action = req.params.action;
 
     if (!placeId || !userId || !action) {
         return res.status(400).send({ message: 'placeId, userId, action are required' });
@@ -321,5 +322,6 @@ app.post('/location/', async (req, res) => {
         return res.status(500).send({ message: 'Internal server error' });
     }
 });
+
 
 module.exports = app;
