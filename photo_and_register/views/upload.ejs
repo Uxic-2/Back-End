@@ -42,7 +42,23 @@
             <%= message %>
         </div>
         <% } %>
+
+        <h2 class="mt-5">My Photos</h2>
+        <% if (photos.length > 0) { %>
+            <ul class="list-group">
+                <% photos.forEach(photo => { %>
+                    <li class="list-group-item">
+                        <img src="/image/<%= photo.filename %>" alt="<%= photo.filename %>" style="width: 100px;">
+                        <span><%= photo.filename %></span>
+                        <a href="/delete-image/<%= photo.filename %>" class="btn btn-danger btn-sm float-right ml-2">Delete</a>
+                    </li>
+                <% }); %>
+            </ul>
+        <% } else { %>
+            <p>No photos uploaded yet.</p>
+        <% } %>
     </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
     <script>
         document.getElementById('uploadImg').addEventListener('change', function(event) {
