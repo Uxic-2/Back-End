@@ -173,6 +173,31 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
             gps: gps
         }
     });
+
+    uploadStream.on('finish', async () => {
+        fs.unlink(filePath, (err) => {
+            if (err) console.error('Error deleting file:', err);
+        });
+
+        const uploadedFileId = uploadStream.id.toString(); // _id를 문자열로 변환
+
+        // 유저의 uploaded_photoid에 추가
+        try {
+            const userId = req.session.user.id;
+            await db.collection('users').updateOne(
+                { id: userId },
+                { $push: { uploaded_photoid: uploadedFileId } }
+            );
+            res.render('upload', { message: 'File uploaded and saved to MongoDB successfully.' });
+        } catch (error) {
+            console.error('Error updating user uploaded_photoid:', error);
+            res.render('upload', { message: 'Error updating user data.' });
+        }
+    }).on('error', (error) => {
+        console.error('Error uploading file to MongoDB:', error);
+        res.render('upload', { message: 'Error uploading file.' });
+    });
+
     fileStream.pipe(uploadStream)
         .on('finish', () => {
             fs.unlink(filePath, (err) => {
