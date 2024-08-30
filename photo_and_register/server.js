@@ -6,8 +6,7 @@ const { MongoClient, GridFSBucket } = require('mongodb');
 const Exif = require('exif').ExifImage;
 const cors = require('cors');
 const session = require('express-session');
-const bcrypt = require('bcrypt'); // bcrypt 모듈 추가
-// const bcrypt = require('bcryptjs'); // bcrypt 모듈 추가
+const bcrypt = require('bcryptjs');
 
 const app = express();
 
@@ -31,15 +30,14 @@ app.use(session({
 }));
 
 const db_url = 'mongodb+srv://bhw119:YYLitUv8euBCtgxA@uxic.xsjkwl9.mongodb.net/?retryWrites=true&w=majority&appName=Uxic';
-let db, photodb, bucket;
+let db, bucket;
 
 async function main() {
     try {
         const client = new MongoClient(db_url);
         await client.connect();
         db = client.db('db');
-        photodb = client.db('photodb');
-        bucket = new GridFSBucket(photodb, { bucketName: 'photo' });
+        bucket = new GridFSBucket(db, { bucketName: 'photo' });
 
         console.log('Connected to databases');
         app.listen(8080, () => {
@@ -55,7 +53,6 @@ main().catch(console.error);
 // 공통 미들웨어에 DB와 GridFSBucket 추가
 app.use((req, res, next) => {
     req.db = db;
-    req.photodb = photodb;
     req.bucket = bucket;
     next();
 });
@@ -72,12 +69,22 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// 로그인 확인 미들웨어
+const ensureAuthenticated = (req, res, next) => {
+    if (req.session && req.session.user) {
+        return next();
+    }
+    res.redirect('/member/login?error=' + encodeURIComponent('로그인이 필요합니다.'));
+};
+
 // GET 요청 처리
 app.get('/', (req, res) => res.render('main.ejs'));
-app.get('/upload', (req, res) => res.render('upload', { message: null }));
-app.get('/search', async (req, res) => {
+
+app.get('/upload', ensureAuthenticated, (req, res) => res.render('upload', { message: null }));
+
+app.get('/search', ensureAuthenticated, async (req, res) => {
     try {
-        const photos = await photodb.collection('photo.files').find({}).toArray();
+        const photos = await db.collection('photo.files').find({}).toArray();
         const photoDetails = photos.map(photo => ({
             filename: photo.filename,
             address: photo.metadata ? photo.metadata.address : 'No address',
@@ -87,7 +94,7 @@ app.get('/search', async (req, res) => {
                 latitude: photo.metadata.gps ? photo.metadata.gps.latitude : 'Unknown',
                 longitude: photo.metadata.gps ? photo.metadata.gps.longitude : 'Unknown'
             } : { latitude: 'Unknown', longitude: 'Unknown' },
-            uploadDate: photo.uploadDate.toISOString()
+            uploadDate: photo.uploadDate.toISOString(),
         }));
         res.render('search', { photos: photoDetails });
     } catch (err) {
@@ -95,28 +102,27 @@ app.get('/search', async (req, res) => {
         res.render('search', { photos: [] });
     }
 });
-app.get('/image/:filename', (req, res) => {
+
+app.get('/image/:filename', ensureAuthenticated, (req, res) => {
     const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
     downloadStream.pipe(res);
 });
-app.get('/location', (req, res) => {
+
+app.get('/location', ensureAuthenticated, (req, res) => {
     const address = req.query.address || 'Seoul, Korea';
     const latitude = parseFloat(req.query.latitude) || 37.5665;  // Default latitude for Seoul
     const longitude = parseFloat(req.query.longitude) || 126.978; // Default longitude for Seoul
+    const userId = req.session.user ? req.session.user.id : null; // 세션에서 사용자 ID 가져오기
 
-    res.render('location', { address, latitude, longitude });
+    res.render('location', { address, latitude, longitude, userId });
 });
 
-app.get('/mypage', (req, res) => {
-    if (req.session && req.session.user) {
-        res.render('mypage', { user: req.session.user });
-    } else {
-        res.redirect('/member/login');
-    }
+app.get('/mypage', ensureAuthenticated, (req, res) => {
+    res.render('mypage', { user: req.session.user });
 });
 
 // POST 요청 처리
-app.post('/upload', upload.single('uploadImg'), async (req, res) => {
+app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(uploadDir, req.file.filename);
     const fileStream = fs.createReadStream(filePath);
 
@@ -170,17 +176,17 @@ app.post('/upload', upload.single('uploadImg'), async (req, res) => {
         });
 });
 
-app.post('/delete-image/:filename', async (req, res) => {
+app.post('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
     try {
         const filename = req.params.filename;
-        const file = await photodb.collection('photo.files').findOne({ filename: filename });
+        const file = await db.collection('photo.files').findOne({ filename: filename });
 
         if (!file) {
             return res.status(404).send('File not found');
         }
 
-        await photodb.collection('photo.files').deleteOne({ _id: file._id });
-        await photodb.collection('photo.chunks').deleteMany({ files_id: file._id });
+        await db.collection('photo.files').deleteOne({ _id: file._id });
+        await db.collection('photo.chunks').deleteMany({ files_id: file._id });
 
         res.redirect('/search');
     } catch (error) {
@@ -191,7 +197,7 @@ app.post('/delete-image/:filename', async (req, res) => {
 
 // 로그인 페이지 렌더링
 app.get('/member/login', (req, res) => {
-    res.render('login.ejs');
+    res.render('login.ejs', { error: req.query.error });
 });
 
 // 로그인 데이터 처리
@@ -211,8 +217,7 @@ app.post('/member/login', async (req, res) => {
             return res.redirect('/member/login?error=' + encodeURIComponent('비밀번호가 잘못되었습니다.'));
         }
 
-        req.session.user = { id: user.id };
-        req.session.user = { name: user.name};
+        req.session.user = { id: user.id, name: user.name };
 
         res.redirect('/');
     } catch (error) {
@@ -237,7 +242,7 @@ app.get('/member/register', (req, res) => {
     res.render('register.ejs');
 });
 
-// 회원가입 데이터 처리
+// 회원가입 처리
 app.post('/member/register', async (req, res) => {
     const { name, phone, birthdate, email, id, pw } = req.body;
 
@@ -255,7 +260,10 @@ app.post('/member/register', async (req, res) => {
             birthdate,
             email,
             id,
-            pw: hashedPassword
+            pw: hashedPassword,
+            uploaded_photoid: [],
+            liked_photoid: [],
+            liked_placeid: []
         });
 
         console.log('User registered:', result.insertedId);
@@ -266,12 +274,51 @@ app.post('/member/register', async (req, res) => {
     }
 });
 
-// 현재 로그인 상태를 반환하는 엔드포인트
 app.get('/auth-status', (req, res) => {
     if (req.session && req.session.user) {
         res.json({ loggedIn: true, user: req.session.user });
     } else {
         res.json({ loggedIn: false });
+    }
+});
+
+// 장소 좋아요 추가 및 삭제 라우트
+app.post('/location/', async (req, res) => {
+    const { placeId, userId, action } = req.body;
+
+    if (!placeId || !userId || !action) {
+        return res.status(400).send({ message: 'placeId, userId, action are required' });
+    }
+
+    try {
+        const user = await db.collection('users').findOne({ id: userId });
+
+        if (!user) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        let update;
+
+        if (action === 'add') {
+            if (!user.liked_placeid.includes(placeId)) {
+                update = { $push: { liked_placeid: placeId } };
+            }
+        } else if (action === 'remove') {
+            if (user.liked_placeid.includes(placeId)) {
+                update = { $pull: { liked_placeid: placeId } };
+            }
+        } else {
+            return res.status(400).send({ message: 'Invalid action' });
+        }
+
+        if (update) {
+            await db.collection('users').updateOne({ id: userId }, update);
+        }
+
+        return res.status(200).send({ message: 'Success', liked_placeid: user.liked_placeid });
+    } catch (error) {
+        console.error('Error updating liked places:', error);
+        return res.status(500).send({ message: 'Internal server error' });
     }
 });
 
