@@ -44,7 +44,7 @@
         <% } %>
 
         <h2 class="mt-5">My Photos</h2>
-        <% if (photos.length > 0) { %>
+        <% if (typeof photos !== 'undefined' && photos.length > 0) { %>
             <ul class="list-group">
                 <% photos.forEach(photo => { %>
                     <li class="list-group-item">
@@ -87,6 +87,13 @@
             var decimal = degrees + (minutes / 60) + (seconds / 3600);
             return ref === 'S' || ref === 'W' ? -decimal : decimal;
         }
+
+        // 업로드 후 페이지를 자동으로 새로고침하는 함수
+        document.getElementById('uploadForm').onsubmit = function() {
+            setTimeout(function() {
+                window.location.reload();
+            }, 1000); // 1초 후에 페이지 새로고침
+        };
     </script>
 </body>
 </html>
