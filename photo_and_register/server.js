@@ -80,20 +80,22 @@ const ensureAuthenticated = (req, res, next) => {
 // GET 요청 처리
 app.get('/', (req, res) => res.render('main.ejs'));
 
-app.get('/upload', ensureAuthenticated, async (req, res) => {
+app.get('/upload', async (req, res) => {
     try {
-        // 파일 목록 가져오기
+        // 데이터베이스에서 모든 사진 파일 조회
         const photos = await db.collection('photo.files').find({}).toArray();
-        const photoDetails = photos.map(photo => ({
-            filename: photo.filename,
-        }));
 
-        res.render('upload', { message: null, photos: photoDetails });
-    } catch (err) {
-        console.error('Error fetching photos:', err);
-        res.render('upload', { message: 'Error fetching photos.', photos: [] });
+        // 템플릿으로 photos 변수와 함께 렌더링
+        res.render('upload', { 
+            message: null, // 업로드 후 성공 메시지를 표시하려면 여기에 전달
+            photos: photos
+        });
+    } catch (error) {
+        console.error('오류:', error);
+        res.status(500).send('서버 오류');
     }
 });
+
 
 app.get('/search', ensureAuthenticated, async (req, res) => {
     try {
@@ -144,6 +146,27 @@ app.get('/mypage', ensureAuthenticated, (req, res) => {
     res.render('mypage', { user: req.session.user });
 });
 
+// 내 여행 폴더 페이지 렌더링
+app.get('/mypage/folder', ensureAuthenticated, async (req, res) => {
+    const userId = req.session.user.id;
+
+    try {
+        // 데이터베이스에서 사용자의 여행 폴더 정보를 가져옵니다.
+        const user = await db.collection('users').findOne({ id: userId });
+
+        if (!user) {
+            return res.status(404).send('User not found');
+        }
+
+        // 사용자의 여행 폴더 정보를 가져와서 렌더링합니다.
+        res.render('folder', { user, travelFolders: user.travel_folders || [] });
+    } catch (error) {
+        console.error('Error fetching travel folders:', error);
+        res.status(500).send('Error fetching travel folders');
+    }
+});
+
+
 // POST 요청 처리
 app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(uploadDir, req.file.filename);
@@ -187,36 +210,65 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
         }
     });
 
+    // uploadStream.on('finish', async () => {
+    //     fs.unlink(filePath, (err) => {
+    //         if (err) console.error('Error deleting file:', err);
+    //     });
+
+    //     const uploadedFileId = uploadStream.id.toString(); // _id를 문자열로 변환
+
+    //     // 유저의 uploaded_photoid에 추가
+    //     try {
+    //         const userId = req.session.user.id;
+    //         await db.collection('users').updateOne(
+    //             { id: userId },
+    //             { $push: { uploaded_photoid: uploadedFileId } }
+    //         );
+    //         const photos = await db.collection('photo.files').find({}).toArray();
+    //         const photoDetails = photos.map(photo => ({
+    //             filename: photo.filename,
+    //         }));
+
+            
+    //         res.render('upload', { message: 'File uploaded and saved to MongoDB successfully.' });
+    //     } catch (error) {
+    //         console.error('Error updating user uploaded_photoid:', error);
+    //         res.render('upload', { message: 'Error updating user data.' });
+    //     }
+    // }).on('error', (error) => {
+    //     console.error('Error uploading file to MongoDB:', error);
+    //     res.render('upload', { message: 'Error uploading file.' });
+    // });
+
     uploadStream.on('finish', async () => {
-        fs.unlink(filePath, (err) => {
-            if (err) console.error('Error deleting file:', err);
-        });
-
-        const uploadedFileId = uploadStream.id.toString(); // _id를 문자열로 변환
-
-        // 유저의 uploaded_photoid에 추가
         try {
+            // 파일이 업로드된 후 임시 파일 삭제
+            fs.unlink(filePath, (err) => {
+                if (err) console.error('파일 삭제 오류:', err);
+            });
+    
+            const uploadedFileId = uploadStream.id.toString();
+    
             const userId = req.session.user.id;
             await db.collection('users').updateOne(
                 { id: userId },
                 { $push: { uploaded_photoid: uploadedFileId } }
             );
-            const photos = await db.collection('photo.files').find({}).toArray();
-            const photoDetails = photos.map(photo => ({
-                filename: photo.filename,
-            }));
-
-            
-            res.render('upload', { message: 'File uploaded and saved to MongoDB successfully.' });
+    
+            // 응답을 한 번만 보내도록 보장
+            res.redirect('/upload');
         } catch (error) {
-            console.error('Error updating user uploaded_photoid:', error);
-            res.render('upload', { message: 'Error updating user data.' });
+            console.error('오류:', error);
+    
+            // 이미 응답이 전송되지 않은 경우에만 에러를 처리하고 응답을 보냄
+            if (!res.headersSent) {
+                res.status(500).send('서버 오류');
+            }
         }
-    }).on('error', (error) => {
-        console.error('Error uploading file to MongoDB:', error);
-        res.render('upload', { message: 'Error uploading file.' });
     });
-
+    
+    
+    
     fileStream.pipe(uploadStream)
         .on('finish', () => {
             fs.unlink(filePath, (err) => {
