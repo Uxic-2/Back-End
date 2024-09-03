@@ -7,6 +7,7 @@ const Exif = require('exif').ExifImage;
 const cors = require('cors');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
+const axios = require('axios'); // 주소를 위도와 경도로 변환하기 위한 axios 추가
 
 const app = express();
 
@@ -77,6 +78,28 @@ const ensureAuthenticated = (req, res, next) => {
     res.redirect('/member/login?error=' + encodeURIComponent('로그인이 필요합니다.'));
 };
 
+async function getLatLngFromAddress(address) {
+    try {
+        const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+            params: {
+                q: address,
+                format: 'json',
+                limit: 1
+            }
+        });
+
+        if (response.data.length > 0) {
+            const { lat, lon } = response.data[0];
+            return { latitude: parseFloat(lat), longitude: parseFloat(lon) };
+        } else {
+            return { latitude: null, longitude: null };
+        }
+    } catch (error) {
+        console.error('Error getting latitude and longitude from address:', error);
+        return { latitude: null, longitude: null };
+    }
+}
+
 // GET 요청 처리
 app.get('/', (req, res) => res.render('main.ejs'));
 
@@ -142,6 +165,7 @@ app.get('/location', async (req, res) => {
 });
 
 
+
 app.get('/mypage', ensureAuthenticated, (req, res) => {
     res.render('mypage', { user: req.session.user });
 });
@@ -199,7 +223,17 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
     const gps = exifData.gps ? {
         latitude: convertDMSToDecimal(exifData.gps.GPSLatitude, exifData.gps.GPSLatitudeRef),
         longitude: convertDMSToDecimal(exifData.gps.GPSLongitude, exifData.gps.GPSLongitudeRef)
-    } : { latitude: 'Unknown', longitude: 'Unknown' };
+    } : { latitude: null, longitude: null };
+
+    // EXIF 데이터에 GPS 정보가 없는 경우 주소를 기반으로 위도와 경도 계산
+    if (gps.latitude === null || gps.longitude === null) {
+        const address = req.body.address;
+        if (address) {
+            const { latitude, longitude } = await getLatLngFromAddress(address);
+            gps.latitude = latitude;
+            gps.longitude = longitude;
+        }
+    }
 
     const uploadStream = bucket.openUploadStream(req.body.filename || 'default_name' + path.extname(req.file.originalname), {
         metadata: {
@@ -210,77 +244,44 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
         }
     });
 
-    // uploadStream.on('finish', async () => {
-    //     fs.unlink(filePath, (err) => {
-    //         if (err) console.error('Error deleting file:', err);
-    //     });
-
-    //     const uploadedFileId = uploadStream.id.toString(); // _id를 문자열로 변환
-
-    //     // 유저의 uploaded_photoid에 추가
-    //     try {
-    //         const userId = req.session.user.id;
-    //         await db.collection('users').updateOne(
-    //             { id: userId },
-    //             { $push: { uploaded_photoid: uploadedFileId } }
-    //         );
-    //         const photos = await db.collection('photo.files').find({}).toArray();
-    //         const photoDetails = photos.map(photo => ({
-    //             filename: photo.filename,
-    //         }));
-
-            
-    //         res.render('upload', { message: 'File uploaded and saved to MongoDB successfully.' });
-    //     } catch (error) {
-    //         console.error('Error updating user uploaded_photoid:', error);
-    //         res.render('upload', { message: 'Error updating user data.' });
-    //     }
-    // }).on('error', (error) => {
-    //     console.error('Error uploading file to MongoDB:', error);
-    //     res.render('upload', { message: 'Error uploading file.' });
-    // });
-
     uploadStream.on('finish', async () => {
         try {
             // 파일이 업로드된 후 임시 파일 삭제
             fs.unlink(filePath, (err) => {
                 if (err) console.error('파일 삭제 오류:', err);
             });
-    
+
             const uploadedFileId = uploadStream.id.toString();
-    
             const userId = req.session.user.id;
             await db.collection('users').updateOne(
                 { id: userId },
                 { $push: { uploaded_photoid: uploadedFileId } }
             );
-    
+
             // 응답을 한 번만 보내도록 보장
             res.redirect('/upload');
         } catch (error) {
             console.error('오류:', error);
-    
-            // 이미 응답이 전송되지 않은 경우에만 에러를 처리하고 응답을 보냄
             if (!res.headersSent) {
                 res.status(500).send('서버 오류');
             }
         }
     });
-    
-    
-    
+
     fileStream.pipe(uploadStream)
         .on('finish', () => {
             fs.unlink(filePath, (err) => {
-                if (err) console.error('Error deleting file:', err);
+                if (err) console.error('파일 삭제 오류:', err);
             });
-            res.render('upload', { message: 'File uploaded and saved to MongoDB successfully.' });
         })
-        .on('error', (error) => {
-            console.error('Error uploading file to MongoDB:', error);
-            res.render('upload', { message: 'Error uploading file.' });
+        .on('error', (err) => {
+            console.error('파일 업로드 오류:', err);
+            if (!res.headersSent) {
+                res.status(500).send('서버 오류');
+            }
         });
 });
+
 
 app.post('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
     try {
