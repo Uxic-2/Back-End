@@ -3,18 +3,50 @@
 
 <head>
     <title>Schedule Page</title>
-    <script
-        src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=3585dfdc26eb8686b36cb652a1410094&libraries=services"></script>
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=3585dfdc26eb8686b36cb652a1410094&libraries=services"></script>
     <style>
         #map {
             width: 100%;
             height: 500px;
+        }
+        #routeBtn, #setStartEndBtn {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            font-size: 18px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            color: #007bff;
+            background-color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s, color 0.3s, border-color 0.3s;
+        }
+        #routeBtn:hover, #setStartEndBtn:hover {
+            background-color: #007bff;
+            color: #fff;
+            border-color: #0056b3;
+            transform: scale(1.05);
+        }
+        #routeDisplay {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            font-size: 18px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            color: #007bff;
+            background-color: #fff;
+            width: 80%;
+            text-align: center;
         }
     </style>
 </head>
 
 <body>
     <div id="map"></div>
+    <button id="setStartEndBtn">출발지, 목적지 설정</button>
+    <button id="routeBtn">추천 경로 찾기</button>
+    <div id="routeDisplay">추천 경로 결과</div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
@@ -26,9 +58,10 @@
                 return;
             }
 
-            var coords = locations.split('|').map(function (loc) {
-                var [lng, lat] = loc.split(',');
-                return { lat: parseFloat(lat), lng: parseFloat(lng) };
+            var coords = locations.split('|').map(function (loc, idx) {
+                var [position, placeName] = loc.split(':');
+                var [lng, lat] = position.split(',');
+                return { lat: parseFloat(lat), lng: parseFloat(lng), placeName: placeName, idx: idx + 1 };
             });
 
             var mapContainer = document.getElementById('map');
@@ -39,12 +72,151 @@
 
             var map = new kakao.maps.Map(mapContainer, mapOptions);
 
+            var infoWindow = new kakao.maps.InfoWindow({ zIndex: 1 });
+            var markers = [];
+            var startMarker = null;
+            var endMarker = null;
+            var startIndex = null;
+            var endIndex = null;
+
             coords.forEach(function (coord) {
-                new kakao.maps.Marker({
+                var imageSrc = 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_blue.png';
+                var imageSize = new kakao.maps.Size(36, 37);
+                var imgOptions = {
+                    spriteSize: new kakao.maps.Size(36, 691),
+                    spriteOrigin: new kakao.maps.Point(0, (coord.idx - 1) * 46 + 10),
+                    offset: new kakao.maps.Point(13, 37)
+                };
+                var markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imgOptions);
+
+                var marker = new kakao.maps.Marker({
                     position: new kakao.maps.LatLng(coord.lat, coord.lng),
+                    image: markerImage,
                     map: map
                 });
+
+                // 인포윈도우에 표시할 내용
+                var content = `<div style="padding:5px;">${coord.placeName}</div>`;
+
+                // 마커에 마우스를 올리면 인포윈도우 표시
+                kakao.maps.event.addListener(marker, 'mouseover', function () {
+                    infoWindow.setContent(content);
+                    infoWindow.open(map, marker);
+                });
+
+                // 마커에서 마우스를 뗄 때 인포윈도우 숨기기
+                kakao.maps.event.addListener(marker, 'mouseout', function () {
+                    infoWindow.close();
+                });
+
+                // 마커 클릭 이벤트
+                kakao.maps.event.addListener(marker, 'click', function () {
+                    if (startMarker && endMarker) {
+                        alert('출발지와 목적지가 모두 설정되어 있습니다. 추천 경로 찾기를 클릭하세요.');
+                        return;
+                    }
+
+                    if (!startMarker) {
+                        startMarker = marker;
+                        startIndex = coord.idx - 1;
+                        alert(`출발지로 ${coord.placeName}이(가) 설정되었습니다.`);
+                    } else if (!endMarker) {
+                        endMarker = marker;
+                        endIndex = coord.idx - 1;
+                        alert(`목적지로 ${coord.placeName}이(가) 설정되었습니다.`);
+                    }
+                });
+
+                markers.push(marker);
             });
+
+            document.getElementById('setStartEndBtn').addEventListener('click', function () {
+                if (!startMarker || !endMarker) {
+                    alert('출발지와 목적지를 모두 설정해주세요.');
+                    return;
+                }
+                alert('출발지와 목적지가 설정되었습니다. 추천 경로 찾기를 클릭하세요.');
+            });
+
+            document.getElementById('routeBtn').addEventListener('click', function () {
+                if (startIndex === null || endIndex === null) {
+                    alert('출발지와 목적지를 모두 설정해주세요.');
+                    return;
+                }
+
+                var locationsForPath = coords.map(coord => ({ lat: coord.lat, lng: coord.lng }));
+                var distanceMatrix = calculateDistanceMatrix(locationsForPath);
+                var shortestPath = findShortestPath(distanceMatrix, startIndex, endIndex);
+
+                if (shortestPath.length === 0) {
+                    document.getElementById('routeDisplay').textContent = '경로를 찾을 수 없습니다.';
+                } else {
+                    document.getElementById('routeDisplay').textContent = '추천 경로: ' + shortestPath.map(function (index) {
+                        return coords[index].idx; // 마커 번호로 출력
+                    }).join(' -> ');
+                }
+            });
+
+            // 거리 행렬 계산 기능-> 두 지점 사이의 거리 계산
+            function calculateDistanceMatrix(locations) {
+                var n = locations.length;
+                var matrix = Array.from({ length: n }, () => Array(n).fill(Infinity));
+
+                function haversine(lat1, lon1, lat2, lon2) {
+                    var R = 6371; // Radius of the Earth in km
+                    var dLat = (lat2 - lat1) * (Math.PI / 180);
+                    var dLon = (lon2 - lon1) * (Math.PI / 180);
+                    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                            Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    return R * c;
+                }
+
+                for (var i = 0; i < n; i++) {
+                    for (var j = 0; j < n; j++) {
+                        if (i !== j) {
+                            var d = haversine(locations[i].lat, locations[i].lng, locations[j].lat, locations[j].lng);
+                            matrix[i][j] = d;
+                        } else {
+                            matrix[i][j] = 0;
+                        }
+                    }
+                }
+
+                return matrix;
+            }
+
+            //TSP알고리즘 사용->출발지, 목적지 포함하여 전체의 최단 경로 찾기
+            function findShortestPath(distanceMatrix, start, end) {
+                var n = distanceMatrix.length;
+                var allPoints = Array.from({ length: n }, (_, i) => i).filter(i => i !== start && i !== end);
+                var shortestPath = [];
+                var minCost = Infinity;
+
+                function tsp(path, currentCost) {
+                    if (path.length === allPoints.length) {
+                        currentCost += distanceMatrix[path[path.length - 1]][end];
+                        if (currentCost < minCost) {
+                            minCost = currentCost;
+                            shortestPath = [start, ...path, end];
+                        }
+                        return;
+                    }
+
+                    for (var i = 0; i < allPoints.length; i++) {
+                        if (path.includes(allPoints[i])) continue;
+
+                        var newPath = path.slice();
+                        newPath.push(allPoints[i]);
+
+                        tsp(newPath, currentCost + distanceMatrix[path[path.length - 1] || start][allPoints[i]]);
+                    }
+                }
+
+                tsp([], 0);
+                return shortestPath;
+            }
         });
     </script>
 </body>
