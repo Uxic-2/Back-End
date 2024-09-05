@@ -282,23 +282,100 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
         });
 });
 
-
 app.post('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
     try {
         const filename = req.params.filename;
+        const userId = req.session.user.id;
+
+        // 사진 파일 정보 찾기
         const file = await db.collection('photo.files').findOne({ filename: filename });
 
         if (!file) {
             return res.status(404).send('File not found');
         }
 
+        // 파일 삭제
         await db.collection('photo.files').deleteOne({ _id: file._id });
         await db.collection('photo.chunks').deleteMany({ files_id: file._id });
 
-        res.redirect('/search');
+        // 파일 _id를 ObjectId 타입으로 변환
+        const fileId = file._id;
+
+        // 사용자 문서에서 해당 사진의 ID를 삭제
+        const updateResult = await db.collection('users').updateOne(
+            { id: userId },
+            { $pull: { uploaded_photoid: fileId } }
+        );
+
+        if (updateResult.modifiedCount === 0) {
+            console.warn('No documents matched the query or no changes were made.');
+        }
+
+        // 삭제 후 사진 목록 업데이트
+        const photos = await db.collection('photo.files').find({}).toArray();
+        const photoDetails = photos.map(photo => ({
+            filename: photo.filename,
+        }));
+
+        res.render('upload', { message: 'File deleted successfully.', photos: photoDetails });
     } catch (error) {
         console.error('Error deleting file:', error);
         res.status(500).send('Error deleting file');
+    }
+});
+
+
+app.post('/update-like', ensureAuthenticated, async (req, res) => {
+    const { photoId, action } = req.body;
+    const userId = req.session.user.id;
+
+    if (!photoId || !action || !['add', 'remove'].includes(action)) {
+        return res.status(400).send({ message: 'Invalid request' });
+    }
+
+    try {
+        const photo = await db.collection('photo.files').findOne({ _id: new MongoClient.ObjectId(photoId) });
+        if (!photo) {
+            return res.status(404).send({ message: 'Photo not found' });
+        }
+
+        let updatePhoto;
+        let updateUser;
+        
+        if (action === 'add') {
+            if (!photo.metadata.liked_by || !photo.metadata.liked_by.includes(userId)) {
+                updatePhoto = {
+                    $inc: { 'metadata.likes': 1 },
+                    $push: { 'metadata.liked_by': userId }
+                };
+                updateUser = {
+                    $push: { liked_photoid: photoId }
+                };
+            }
+        } else if (action === 'remove') {
+            if (photo.metadata.liked_by && photo.metadata.liked_by.includes(userId)) {
+                updatePhoto = {
+                    $inc: { 'metadata.likes': -1 },
+                    $pull: { 'metadata.liked_by': userId }
+                };
+                updateUser = {
+                    $pull: { liked_photoid: photoId }
+                };
+            }
+        }
+
+        if (updatePhoto) {
+            await db.collection('photo.files').updateOne({ _id: new MongoClient.ObjectId(photoId) }, updatePhoto);
+        }
+
+        if (updateUser) {
+            await db.collection('users').updateOne({ id: userId }, updateUser);
+        }
+
+        res.status(200).send({ message: 'Like status updated' });
+    } catch (error) {
+        console.error('Error updating like status:', error);
+        res.status(500).send({ message: 'Internal server error' });
     }
 });
 
