@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Schedule Page</title>
+    <script
+        src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=3585dfdc26eb8686b36cb652a1410094&libraries=services"></script>
+    <style>
+        #map {
+            width: 100%;
+            height: 500px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var urlParams = new URLSearchParams(window.location.search);
+            var locations = urlParams.get('locations');
+
+            if (!locations) {
+                console.error('No locations found in URL.');
+                return;
+            }
+
+            var coords = locations.split('|').map(function (loc) {
+                var [lng, lat] = loc.split(',');
+                return { lat: parseFloat(lat), lng: parseFloat(lng) };
+            });
+
+            var mapContainer = document.getElementById('map');
+            var mapOptions = {
+                center: new kakao.maps.LatLng(coords[0].lat, coords[0].lng),
+                level: 3
+            };
+
+            var map = new kakao.maps.Map(mapContainer, mapOptions);
+
+            coords.forEach(function (coord) {
+                new kakao.maps.Marker({
+                    position: new kakao.maps.LatLng(coord.lat, coord.lng),
+                    map: map
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>

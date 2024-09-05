@@ -533,4 +533,7 @@ app.get('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
         res.status(500).send('Error deleting file');
     }
 });
+app.get('/schedule', (req, res) => {
+    res.render('schedule'); 
+});
 module.exports = app;
