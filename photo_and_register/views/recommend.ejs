@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Map</title>
+    <script
+        src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=3585dfdc26eb8686b36cb652a1410094&libraries=services"></script>
+    <style>
+        /* 스타일 설정 */
+        #map {
+            width: 100%;
+            height: 500px;
+            position: relative;
+        }
+
+        .buttons-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px 0;
+        }
+
+        .button-column {
+            width: 100%;
+            margin: 10px 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .button-column button {
+            display: block;
+            width: calc(33% - 20px);
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            color: #007bff;
+            background-color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.3s, color 0.3s, border-color 0.3s;
+            margin: 10px;
+        }
+
+        .button-column button:hover {
+            background-color: #007bff;
+            color: #fff;
+            border-color: #0056b3;
+            transform: scale(1.05);
+        }
+
+        .button-column button:active {
+            background-color: #0056b3;
+            color: #fff;
+            border-color: #004494;
+            transform: scale(0.95);
+        }
+
+        h1 {
+            text-align: left;
+            margin-left: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            margin: 20px 0;
+            font-size: 24px;
+        }
+
+        #placesList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        #placesList li {
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 300px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid #ddd;
+            overflow: auto;
+            z-index: 10;
+            padding: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Location Map</h1>
+    <div id="map">
+        <div id="placesListContainer" class="overlay">
+            <ul id="placesList"></ul>
+        </div>
+    </div>
+
+    <!-- 검색된 장소의 상세 정보를 출력할 영역 -->
+    <div id="detailContainer"
+        style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-top: 20px;">
+        <h3>Place Details</h3>
+        <ul id="detailList" style="list-style-type: none; padding: 0;"></ul>
+    </div>
+
+    <div class="buttons-container">
+        <h2>정렬 기준</h2>
+        <div class="button-column">
+            <select id="sortOptions">
+                <option value="accuracy">정확도순</option>
+                <option value="distance">거리순</option>
+            </select>
+        </div>
+    </div>
+    <div class="buttons-container">
+        <h2>숙소 BEST</h2>
+        <div class="button-column">
+            <button id="accommodation">전체</button>
+            <button id="accommodation1">호텔</button>
+            <button id="accommodation2">모텔</button>
+            <button id="accommodation3">펜션</button>
+            <button id="accommodation4">리조트</button>
+            <button id="accommodation5">캠핑</button>
+            <button id="accommodation6">게스트하우스</button>
+        </div>
+    </div>
+    <div class="buttons-container">
+        <h2>맛집 BEST</h2>
+        <div class="button-column">
+            <button id="restaurant">전체</button>
+            <button id="cafe">카페</button>
+            <button id="restaurant1">한식</button>
+            <button id="restaurant2">양식</button>
+            <button id="restaurant3">일식</button>
+            <button id="restaurant4">중식</button>
+        </div>
+    </div>
+
+    <!--일정만들기 버튼 추가-->
+    <div class="buttons-container">
+        <div class="button-column">
+            <button id="createScheduleBtn">일정 만들기</button>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var mapContainer = document.getElementById('map');
+            var placesListContainer = document.getElementById('placesListContainer');
+            var address = '<%= address %>'; // 서버에서 전달받은 주소
+            var latitude = '<%= latitude %>'; // 서버에서 전달받은 위도
+            var longitude = '<%= longitude %>'; // 서버에서 전달받은 경도
+            var mapOptions;
+            var centerLatLng;
+
+            // Kakao 지도 생성 함수
+            function createMap(centerLatLng) {
+                mapOptions = {
+                    center: centerLatLng,
+                    level: 3
+                };
+                return new kakao.maps.Map(mapContainer, mapOptions);
+            }
+
+            // GPS 정보가 있는 경우
+            if (latitude && longitude) {
+                centerLatLng = new kakao.maps.LatLng(latitude, longitude);
+                var map = createMap(centerLatLng);
+
+                var marker = new kakao.maps.Marker({
+                    map: map,
+                    position: centerLatLng
+                });
+            }
+            // 주소 정보가 있는 경우
+            else if (address) {
+                var geocoder = new kakao.maps.services.Geocoder();
+                geocoder.addressSearch(address, function (result, status) {
+                    if (status === kakao.maps.services.Status.OK) {
+                        centerLatLng = new kakao.maps.LatLng(result[0].y, result[0].x);
+                        var map = createMap(centerLatLng);
+
+                        var marker = new kakao.maps.Marker({
+                            map: map,
+                            position: centerLatLng
+                        });
+                    } else {
+                        console.error('주소 검색 실패:', status);
+                        centerLatLng = new kakao.maps.LatLng(37.5665, 126.978);
+                        var map = createMap(centerLatLng);
+                    }
+                });
+            }
+            // 기본 중심 좌표 설정
+            else {
+                centerLatLng = new kakao.maps.LatLng(37.5665, 126.978);
+                var map = createMap(centerLatLng);
+            }
+
+            var infowindow = new kakao.maps.InfoWindow({ zIndex: 1 });
+            var places = new kakao.maps.services.Places();
+            var markers = [];
+
+            // 정렬 기준 선택 옵션을 가져옵니다.
+            var sortOptions = document.getElementById('sortOptions');
+
+            // 상세 정보를 출력하는 함수
+            function displayPlaceDetails(details) {
+                var detailList = document.getElementById('detailList');
+                detailList.innerHTML = ''; // 기존 내용을 제거
+
+                details.forEach(function (detail) {
+                    var detailItem = document.createElement('li');
+                    detailItem.innerHTML = `
+                        <strong>${detail.name}</strong><br>
+                        주소: ${detail.address}<br>
+                        전화번호: ${detail.phone ? detail.phone : '없음'}
+                    `;
+                    detailList.appendChild(detailItem);
+                });
+            }
+
+            // 각 버튼에 이벤트 리스너 추가
+            document.getElementById('accommodation').addEventListener('click', function () {
+                searchPlaces('AD5'); // 숙소 전체 카테고리 코드
+            });
+            document.getElementById('accommodation1').addEventListener('click', function () {
+                searchPlacesByKeyword('호텔'); // 호텔 검색
+            });
+            document.getElementById('accommodation2').addEventListener('click', function () {
+                searchPlacesByKeyword('모텔'); // 모텔 검색
+            });
+            document.getElementById('accommodation3').addEventListener('click', function () {
+                searchPlacesByKeyword('펜션'); // 펜션 검색
+            });
+            document.getElementById('accommodation4').addEventListener('click', function () {
+                searchPlacesByKeyword('리조트'); // 리조트 검색
+            });
+            document.getElementById('accommodation5').addEventListener('click', function () {
+                searchPlacesByKeyword('캠핑'); // 캠핑 검색
+            });
+            document.getElementById('accommodation6').addEventListener('click', function () {
+                searchPlacesByKeyword('게스트하우스'); // 게스트하우스 검색
+            });
+            document.getElementById('restaurant').addEventListener('click', function () {
+                searchPlaces('FD6'); // 음식점 전체 카테고리 코드
+            });
+            document.getElementById('cafe').addEventListener('click', function () {
+                searchPlacesByKeyword('카페'); // 카페 검색
+            });
+            document.getElementById('restaurant1').addEventListener('click', function () {
+                searchPlacesByKeyword('한식'); // 한식 검색
+            });
+            document.getElementById('restaurant2').addEventListener('click', function () {
+                searchPlacesByKeyword('양식'); // 양식 검색
+            });
+            document.getElementById('restaurant3').addEventListener('click', function () {
+                searchPlacesByKeyword('일식'); // 일식 검색
+            });
+            document.getElementById('restaurant4').addEventListener('click', function () {
+                searchPlacesByKeyword('중식'); // 중식 검색
+            });
+
+            // 장소 검색 함수
+            function searchPlaces(category) {
+                // 검색 옵션에 거리순 추가
+                var sortOrder = sortOptions.value === 'distance' ? kakao.maps.services.SortBy.DISTANCE : kakao.maps.services.SortBy.ACCURACY;
+                var options = { location: map.getCenter(), sort: sortOrder };
+                places.categorySearch(category, placesSearchCB, options);
+            }
+
+            // 키워드로 장소 검색 함수
+            function searchPlacesByKeyword(keyword) {
+                var sortOrder = sortOptions.value === 'distance' ? kakao.maps.services.SortBy.DISTANCE : kakao.maps.services.SortBy.ACCURACY;
+                var options = { location: map.getCenter(), sort: sortOrder };
+                places.keywordSearch(keyword, placesSearchCB, options);
+            }
+
+            // 장소 검색 콜백 함수
+            function placesSearchCB(data, status, pagination) {
+                if (status === kakao.maps.services.Status.OK) {
+                    displayPlaces(data);
+                    displayPlaceDetails(data.map(function (place) {
+                        return {
+                            name: place.place_name,
+                            address: place.road_address_name || place.address_name,
+                            category: place.category_group_name,
+                            distance: place.distance,
+                            phone: place.phone,
+                            url: place.place_url,
+                            latitude: place.x,
+                            longitude: place.y
+                        };
+                    }));
+                } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
+                    alert('검색 결과가 존재하지 않습니다.');
+                } else if (status === kakao.maps.services.Status.ERROR) {
+                    alert('검색 중 오류가 발생했습니다.');
+                }
+            }
+
+            // 장소 목록 출력 함수
+            function displayPlaces(places) {
+                var listEl = document.getElementById('placesList');
+                var menuEl = document.getElementById('menu_wrap');
+                var fragment = document.createDocumentFragment();
+                var bounds = new kakao.maps.LatLngBounds();
+                var listStr = '';
+
+                listEl && (listEl.innerHTML = '');
+                removeMarker();
+
+                for (var i = 0; i < places.length; i++) {
+                    var placePosition = new kakao.maps.LatLng(places[i].y, places[i].x);
+                    var marker = addMarker(placePosition, i);
+                    var itemEl = getListItem(i, places[i]);
+
+                    bounds.extend(placePosition);
+
+                    (function (marker, title) {
+                        kakao.maps.event.addListener(marker, 'mouseover', function () {
+                            displayInfowindow(marker, title);
+                        });
+
+                        kakao.maps.event.addListener(marker, 'mouseout', function () {
+                            infowindow.close();
+                        });
+
+                        itemEl.onmouseover = function () {
+                            displayInfowindow(marker, title);
+                        };
+
+                        itemEl.onmouseout = function () {
+                            infowindow.close();
+                        };
+                    })(marker, places[i].place_name);
+
+                    fragment.appendChild(itemEl);
+                }
+
+                listEl && listEl.appendChild(fragment);
+                map.setBounds(bounds);
+            }
+
+            // 마커 생성 함수
+            function addMarker(position, idx) {
+                var imageSrc = 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_number_blue.png';
+                var imageSize = new kakao.maps.Size(36, 37);
+                var imgOptions = {
+                    spriteSize: new kakao.maps.Size(36, 691),
+                    spriteOrigin: new kakao.maps.Point(0, idx * 46 + 10),
+                    offset: new kakao.maps.Point(13, 37)
+                };
+                var markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imgOptions);
+                var marker = new kakao.maps.Marker({
+                    position: position,
+                    image: markerImage
+                });
+
+                marker.setMap(map);
+                markers.push(marker);
+
+                return marker;
+            }
+
+            // 마커 삭제 함수
+            function removeMarker() {
+                for (var i = 0; i < markers.length; i++) {
+                    markers[i].setMap(null);
+                }
+                markers = [];
+            }
+
+            // 장소 목록 아이템 생성 함수
+            function getListItem(index, places) {
+                var el = document.createElement('li');
+                var itemStr = '<span class="markerbg marker_' + (index + 1) + '"></span>' +
+                    '<div class="info">' +
+                    '   <h5>' + places.place_name + '</h5>';
+
+                if (places.road_address_name) {
+                    itemStr += '    <span>' + places.road_address_name + '</span>' +
+                        '   <span class="jibun gray">' + places.address_name + '</span>';
+                } else {
+                    itemStr += '    <span>' + places.address_name + '</span>';
+                }
+
+                itemStr += '  <span class="tel">' + places.phone + '</span>' +
+                    '</div>';
+
+                el.innerHTML = itemStr;
+                el.className = 'item';
+
+                return el;
+            }
+
+            // 인포윈도우 표시 함수
+            function displayInfowindow(marker, title) {
+                var content = '<div style="padding:5px;z-index:1;">' + title + '</div>';
+                infowindow.setContent(content);
+                infowindow.open(map, marker);
+            }
+
+            // 검색된 장소 상세 정보를 지도에 표시하는 함수
+            function displayPlaceDetails(details) {
+                var detailContainer = document.getElementById('detailContainer');
+                var detailList = document.getElementById('detailList');
+                detailList.innerHTML = ''; // 기존 내용을 제거
+
+                details.forEach(function (detail) {
+                    var listItem = document.createElement('li');
+                    listItem.innerHTML = `
+            <h4 class="place-name">${detail.name} <button class="select-btn" onclick="selectPlace(${detail.latitude}, ${detail.longitude})">선택</button></h4>
+            <p>주소: ${detail.address}</p>
+            <p>카테고리: ${detail.category}</p>
+            <p>거리: ${detail.distance}m</p>
+            <p>전화번호: ${detail.phone ? detail.phone : '없음'}</p>
+            <p>링크: ${detail.url ? `<a href="${detail.url}" target="_blank">${detail.url}</a>` : '없음'}</p>
+            <p>위도: ${detail.latitude}</p>
+            <p>경도: ${detail.longitude}</p>
+        `;
+
+                    // '선택' 버튼 클릭 이벤트 핸들러 추가
+                    listItem.querySelector('.select-btn').addEventListener('click', function () {
+                        addToURLParameters(detail.latitude, detail.longitude);
+                    });
+
+                    detailList.appendChild(listItem);
+                });
+
+                detailContainer.style.display = 'block';
+            }
+            // 선택된 위치 정보를 URL 파라미터에 추가하는 함수
+            function addToURLParameters(lat, lng) {
+                var urlParams = new URLSearchParams(window.location.search);
+                var locations = urlParams.get('locations');
+
+                if (locations) {
+                    locations += '|' + lat + ',' + lng;
+                } else {
+                    locations = lat + ',' + lng;
+                }
+
+                urlParams.set('locations', locations);
+                window.history.replaceState({}, '', `${window.location.pathname}?${urlParams}`);
+
+                // URL 파라미터 콘솔에 출력
+                console.log('Updated URL:', `${window.location.pathname}?${urlParams}`);
+            }
+
+            // '일정 만들기' 버튼 클릭 시 호출되는 함수
+            function createSchedule() {
+                var urlParams = new URLSearchParams(window.location.search);
+                var locations = urlParams.get('locations');
+
+                if (!locations) {
+                    alert('선택된 장소가 없습니다.');
+                    return;
+                }
+
+                // /schedule 페이지로 이동
+                window.location.href = `/schedule?${urlParams}`;
+            }
+            document.getElementById('createScheduleBtn').addEventListener('click', createSchedule);
+
+
+        });
+    </script>
+</body>
+
+</html>
