@@ -7,11 +7,11 @@
     <link rel="stylesheet" href="/styles/search.css">
     <script>
         var userId = '<%= userId %>'; 
-        var likedPhotoIds = '<%= JSON.stringify(likedPhotoIds) %>'; // JSON.stringify로 배열을 문자열로 변환
+        var likedPhotoIds = '<%= JSON.stringify(likedPhotoIds) %>'; // JSON 배열로 전달
+
         async function handleCheckboxChange(photoId, isChecked) {
             var url = isChecked ? '/photos/add' : '/photos/remove';
     
-            // 데이터 객체를 작성합니다.
             var data = {
                 photoId: photoId,
                 userId: userId,
@@ -37,8 +37,11 @@
                 console.error('요청 오류:', error);
             });
         }
+
+        function isLiked(photoId) {
+            return likedPhotoIds.includes(photoId);
+        }
     </script>
-    
 </head>
 <body>
     <h1>검색 결과</h1>
@@ -60,7 +63,7 @@
                         <p>타임스탬프: <%= photo.timestamp %></p>
                         <p>GPS: 위도 <%= photo.gps.latitude %>, 경도 <%= photo.gps.longitude %></p>
                         <label>
-                            <input type="checkbox" onchange="handleCheckboxChange('<%= photo._id %>', this.checked)">
+                            <input type="checkbox" onchange="handleCheckboxChange('<%= photo._id %>', this.checked)" <% if (likedPhotoIds.includes(photo._id)) { %>checked<% } %>>
                             좋아요
                         </label>
                     </div>

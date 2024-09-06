@@ -124,10 +124,10 @@ app.get('/search', ensureAuthenticated, async (req, res) => {
     const userId = req.session.user ? req.session.user.id : null;
     try {
         const user = await db.collection('users').findOne({ id: userId });
-        const likedPhotoIds = user ? user.liked_photoid : [];
+        const likedPhotoIds = user ? user.liked_photoid.map(id => id.toString()) : []; // Ensure ids are strings
         const photos = await db.collection('photo.files').find({}).toArray();
         const photoDetails = photos.map(photo => ({
-            _id: photo._id, // photoId를 _id로 수정
+            _id: photo._id.toString(), // Ensure _id is a string
             filename: photo.filename,
             address: photo.metadata ? photo.metadata.address : 'No address',
             likes: photo.metadata ? photo.metadata.likes : 0,
