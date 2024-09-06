@@ -121,9 +121,13 @@ app.get('/upload', async (req, res) => {
 
 
 app.get('/search', ensureAuthenticated, async (req, res) => {
+    const userId = req.session.user ? req.session.user.id : null;
     try {
+        const user = await db.collection('users').findOne({ id: userId });
+        const likedPhotoIds = user ? user.liked_photoid : [];
         const photos = await db.collection('photo.files').find({}).toArray();
         const photoDetails = photos.map(photo => ({
+            _id: photo._id, // photoId를 _id로 수정
             filename: photo.filename,
             address: photo.metadata ? photo.metadata.address : 'No address',
             likes: photo.metadata ? photo.metadata.likes : 0,
@@ -134,12 +138,13 @@ app.get('/search', ensureAuthenticated, async (req, res) => {
             } : { latitude: 'Unknown', longitude: 'Unknown' },
             uploadDate: photo.uploadDate.toISOString(),
         }));
-        res.render('search', { photos: photoDetails });
+        res.render('search', { photos: photoDetails, userId, likedPhotoIds });
     } catch (err) {
         console.error('Error fetching photos:', err);
-        res.render('search', { photos: [] });
+        res.render('search', { photos: [], userId: null, likedPhotoIds: [] });
     }
 });
+
 
 app.get('/image/:filename', ensureAuthenticated, (req, res) => {
     const downloadStream = bucket.openDownloadStreamByName(req.params.filename);
@@ -325,59 +330,50 @@ app.post('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
 });
 
 
-app.post('/update-like', ensureAuthenticated, async (req, res) => {
-    const { photoId, action } = req.body;
-    const userId = req.session.user.id;
 
-    if (!photoId || !action || !['add', 'remove'].includes(action)) {
-        return res.status(400).send({ message: 'Invalid request' });
+app.post('/update-like', async (req, res) => {
+    const { photoId, action } = req.body;
+    const userId = req.session.userId; // Assuming userId is stored in session
+
+    if (!photoId || !action || !userId) {
+        return res.status(400).send({ message: 'photoId, action, and userId are required' });
     }
 
     try {
-        const photo = await db.collection('photo.files').findOne({ _id: new MongoClient.ObjectId(photoId) });
-        if (!photo) {
-            return res.status(404).send({ message: 'Photo not found' });
+        const user = await db.collection('users').findOne({ id: userId });
+
+        if (!user) {
+            return res.status(404).send({ message: 'User not found' });
         }
 
-        let updatePhoto;
-        let updateUser;
-        
+        const photoObjectId = ObjectId(photoId); // Convert photoId to ObjectId
+        let update;
+
         if (action === 'add') {
-            if (!photo.metadata.liked_by || !photo.metadata.liked_by.includes(userId)) {
-                updatePhoto = {
-                    $inc: { 'metadata.likes': 1 },
-                    $push: { 'metadata.liked_by': userId }
-                };
-                updateUser = {
-                    $push: { liked_photoid: photoId }
-                };
+            if (!user.liked_photoid.includes(photoObjectId)) {
+                update = { $push: { liked_photoid: photoObjectId } };
             }
         } else if (action === 'remove') {
-            if (photo.metadata.liked_by && photo.metadata.liked_by.includes(userId)) {
-                updatePhoto = {
-                    $inc: { 'metadata.likes': -1 },
-                    $pull: { 'metadata.liked_by': userId }
-                };
-                updateUser = {
-                    $pull: { liked_photoid: photoId }
-                };
+            if (user.liked_photoid.includes(photoObjectId)) {
+                update = { $pull: { liked_photoid: photoObjectId } };
             }
+        } else {
+            return res.status(400).send({ message: 'Invalid action' });
         }
 
-        if (updatePhoto) {
-            await db.collection('photo.files').updateOne({ _id: new MongoClient.ObjectId(photoId) }, updatePhoto);
+        if (update) {
+            await db.collection('users').updateOne({ id: userId }, update);
+            const updatedUser = await db.collection('users').findOne({ id: userId });
+            return res.status(200).send({ message: 'Success', liked_photoid: updatedUser.liked_photoid });
+        } else {
+            return res.status(200).send({ message: 'No change' });
         }
-
-        if (updateUser) {
-            await db.collection('users').updateOne({ id: userId }, updateUser);
-        }
-
-        res.status(200).send({ message: 'Like status updated' });
     } catch (error) {
-        console.error('Error updating like status:', error);
-        res.status(500).send({ message: 'Internal server error' });
+        console.error('Error updating liked places:', error);
+        return res.status(500).send({ message: 'Internal server error' });
     }
 });
+
 
 // 로그인 페이지 렌더링
 app.get('/member/login', (req, res) => {
@@ -505,6 +501,47 @@ app.post('/places/:action', async (req, res) => {
         }
     } catch (error) {
         console.error('Error updating liked places:', error);
+        return res.status(500).send({ message: 'Internal server error' });
+    }
+});
+app.post('/photos/:action', async (req, res) => {
+    const { photoId, userId } = req.body;
+    const action = req.params.action;
+
+    if (!photoId || !userId || !action) {
+        return res.status(400).send({ message: 'photoId, userId, action are required' });
+    }
+
+    try {
+        const user = await db.collection('users').findOne({ id: userId });
+
+        if (!user) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        let update;
+
+        if (action === 'add') {
+            if (!user.liked_photoid.includes(photoId)) {
+                update = { $push: { liked_photoid: photoId } };
+            }
+        } else if (action === 'remove') {
+            if (user.liked_photoid.includes(photoId)) {
+                update = { $pull: { liked_photoid: photoId } };
+            }
+        } else {
+            return res.status(400).send({ message: 'Invalid action' });
+        }
+
+        if (update) {
+            await db.collection('users').updateOne({ id: userId }, update);
+            const updatedUser = await db.collection('users').findOne({ id: userId });
+            return res.status(200).send({ message: 'Success', liked_placeid: updatedUser.liked_placeid });
+        } else {
+            return res.status(200).send({ message: 'No change' });
+        }
+    } catch (error) {
+        console.error('Error updating liked photos:', error);
         return res.status(500).send({ message: 'Internal server error' });
     }
 });

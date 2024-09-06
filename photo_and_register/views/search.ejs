@@ -6,28 +6,39 @@
     <title>검색 결과</title>
     <link rel="stylesheet" href="/styles/search.css">
     <script>
+        var userId = '<%= userId %>'; 
+        var likedPhotoIds = '<%= JSON.stringify(likedPhotoIds) %>'; // JSON.stringify로 배열을 문자열로 변환
         async function handleCheckboxChange(photoId, isChecked) {
-            try {
-                const response = await fetch('/update-like', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        photoId: photoId,
-                        action: isChecked ? 'add' : 'remove'
-                    })
-                });
-                const result = await response.json();
-                if (!response.ok) {
-                    throw new Error(result.message || 'Error updating like status');
+            var url = isChecked ? '/photos/add' : '/photos/remove';
+    
+            // 데이터 객체를 작성합니다.
+            var data = {
+                photoId: photoId,
+                userId: userId,
+                action: isChecked ? 'add' : 'remove'
+            };
+    
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    console.log('요청 성공:', result);
+                } else {
+                    console.error('요청 실패:', result);
                 }
-                console.log(result.message);
-            } catch (error) {
-                console.error('Error:', error);
-            }
+            })
+            .catch(error => {
+                console.error('요청 오류:', error);
+            });
         }
     </script>
+    
 </head>
 <body>
     <h1>검색 결과</h1>
@@ -48,7 +59,6 @@
                         <p>좋아요 수: <%= photo.likes %></p>
                         <p>타임스탬프: <%= photo.timestamp %></p>
                         <p>GPS: 위도 <%= photo.gps.latitude %>, 경도 <%= photo.gps.longitude %></p>
-                        <!-- Add checkbox for liking the photo -->
                         <label>
                             <input type="checkbox" onchange="handleCheckboxChange('<%= photo._id %>', this.checked)">
                             좋아요
