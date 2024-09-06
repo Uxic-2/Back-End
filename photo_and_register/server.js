@@ -536,4 +536,22 @@ app.get('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
 app.get('/schedule', (req, res) => {
     res.render('schedule'); 
 });
+
+app.get('/recommend', async (req, res) => {
+    const address = req.query.address || 'Seoul, Korea';
+    const latitude = parseFloat(req.query.latitude) || 37.5665;
+    const longitude = parseFloat(req.query.longitude) || 126.978;
+    const userId = req.session.user ? req.session.user.id : null;
+
+    try {
+        const user = await db.collection('users').findOne({ id: userId });
+        const likedPlaceIds = user ? user.liked_placeid : [];
+
+        res.render('recommend', { address, latitude, longitude, userId, likedPlaceIds });
+    } catch (err) {
+        console.error('Error fetching user data:', err);
+        res.render('recommend', { address, latitude, longitude, userId, likedPlaceIds: [] });
+    }
+});
+
 module.exports = app;
