@@ -275,14 +275,14 @@
             function searchPlaces(category) {
                 // 검색 옵션에 거리순 추가
                 var sortOrder = sortOptions.value === 'distance' ? kakao.maps.services.SortBy.DISTANCE : kakao.maps.services.SortBy.ACCURACY;
-                var options = { location: map.getCenter(), sort: sortOrder };
+                var options = { location: centerLatLng, sort: sortOrder };
                 places.categorySearch(category, placesSearchCB, options);
             }
 
             // 키워드로 장소 검색 함수
             function searchPlacesByKeyword(keyword) {
                 var sortOrder = sortOptions.value === 'distance' ? kakao.maps.services.SortBy.DISTANCE : kakao.maps.services.SortBy.ACCURACY;
-                var options = { location: map.getCenter(), sort: sortOrder };
+                var options = { location: centerLatLng, sort: sortOrder };
                 places.keywordSearch(keyword, placesSearchCB, options);
             }
 
