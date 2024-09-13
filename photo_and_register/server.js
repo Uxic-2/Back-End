@@ -22,6 +22,12 @@ app.use(cors({
     allowedHeaders: ['Content-Type'],
 }));
 
+app.use((req, res, next) => {
+    req.db = db;
+    req.bucket = bucket;
+    next();
+});
+
 // 세션 설정
 app.use(session({
     secret: 'your_secret_key',
@@ -50,13 +56,6 @@ async function main() {
 }
 
 main().catch(console.error);
-
-// 공통 미들웨어에 DB와 GridFSBucket 추가
-app.use((req, res, next) => {
-    req.db = db;
-    req.bucket = bucket;
-    next();
-});
 
 // Ensure the upload directory exists
 const uploadDir = path.join(__dirname, 'public', 'image');
@@ -461,52 +460,15 @@ app.get('/auth-status', (req, res) => {
         res.json({ loggedIn: false });
     }
 });
+//좋아요 오류 해결을 위해 mongodb 패키지에서 ObjectId를 가져오는 코드
 
-// 장소 좋아요 추가 및 삭제 라우트
-app.post('/places/:action', async (req, res) => {
-    const { placeId, userId } = req.body;
-    const action = req.params.action;
+const { ObjectId } = require('mongodb');
 
-    if (!placeId || !userId || !action) {
-        return res.status(400).send({ message: 'placeId, userId, action are required' });
-    }
 
-    try {
-        const user = await db.collection('users').findOne({ id: userId });
-
-        if (!user) {
-            return res.status(404).send({ message: 'User not found' });
-        }
-
-        let update;
-
-        if (action === 'add') {
-            if (!user.liked_placeid.includes(placeId)) {
-                update = { $push: { liked_placeid: placeId } };
-            }
-        } else if (action === 'remove') {
-            if (user.liked_placeid.includes(placeId)) {
-                update = { $pull: { liked_placeid: placeId } };
-            }
-        } else {
-            return res.status(400).send({ message: 'Invalid action' });
-        }
-
-        if (update) {
-            await db.collection('users').updateOne({ id: userId }, update);
-            const updatedUser = await db.collection('users').findOne({ id: userId });
-            return res.status(200).send({ message: 'Success', liked_placeid: updatedUser.liked_placeid });
-        } else {
-            return res.status(200).send({ message: 'No change' });
-        }
-    } catch (error) {
-        console.error('Error updating liked places:', error);
-        return res.status(500).send({ message: 'Internal server error' });
-    }
-});
 app.post('/photos/:action', async (req, res) => {
-    const { photoId, userId } = req.body;
-    const action = req.params.action;
+    const { photoId } = req.body;
+    const userId = req.session.user.id; // 로그인한 사용자의 ID를 세션에서 가져옴
+    const action = req.params.action; // 'add' 또는 'remove'
 
     if (!photoId || !userId || !action) {
         return res.status(400).send({ message: 'photoId, userId, action are required' });
@@ -514,37 +476,99 @@ app.post('/photos/:action', async (req, res) => {
 
     try {
         const user = await db.collection('users').findOne({ id: userId });
+        const photoObjectId = new ObjectId(photoId); // ObjectId로 변환
 
         if (!user) {
             return res.status(404).send({ message: 'User not found' });
         }
 
-        let update;
+        let userUpdate, photoUpdate;
 
         if (action === 'add') {
-            if (!user.liked_photoid.includes(photoId)) {
-                update = { $push: { liked_photoid: photoId } };
+            // 좋아요를 추가하는 경우
+            if (!user.liked_photoid.includes(photoObjectId)) {
+                userUpdate = { $push: { liked_photoid: photoObjectId } };
+                photoUpdate = { $inc: { 'metadata.likes': 1 } };
+            } else {
+                return res.status(400).send({ message: '이미 좋아요를 누른 사진입니다.' });
             }
         } else if (action === 'remove') {
-            if (user.liked_photoid.includes(photoId)) {
-                update = { $pull: { liked_photoid: photoId } };
+            // 좋아요를 제거하는 경우
+            if (user.liked_photoid.includes(photoObjectId)) {
+                userUpdate = { $pull: { liked_photoid: photoObjectId } };
+                photoUpdate = { $inc: { 'metadata.likes': -1 } };
+            } else {
+                return res.status(400).send({ message: '좋아요를 누르지 않은 사진입니다.' });
             }
         } else {
             return res.status(400).send({ message: 'Invalid action' });
         }
 
-        if (update) {
-            await db.collection('users').updateOne({ id: userId }, update);
-            const updatedUser = await db.collection('users').findOne({ id: userId });
-            return res.status(200).send({ message: 'Success', liked_placeid: updatedUser.liked_placeid });
-        } else {
-            return res.status(200).send({ message: 'No change' });
-        }
+        // 유저의 liked_photoid 업데이트
+        await db.collection('users').updateOne({ id: userId }, userUpdate);
+
+        // photo.files 컬렉션의 좋아요 수 업데이트
+        await db.collection('photo.files').updateOne({ _id: photoObjectId }, photoUpdate);
+
+        res.status(200).send({ message: `사진에 좋아요를 ${action === 'add' ? '추가' : '제거'}했습니다.` });
     } catch (error) {
-        console.error('Error updating liked photos:', error);
-        return res.status(500).send({ message: 'Internal server error' });
+        console.error('좋아요 처리 중 오류:', error);
+        res.status(500).send({ message: '서버 오류가 발생했습니다.' });
     }
 });
+
+app.post('/photos/:action', async (req, res) => {
+    const { photoId } = req.body;
+    const userId = req.session.user.id; // 로그인한 사용자의 ID를 세션에서 가져옴
+    const action = req.params.action; // 'add' 또는 'remove'
+
+    if (!photoId || !userId || !action) {
+        return res.status(400).send({ message: 'photoId, userId, action are required' });
+    }
+
+    try {
+        const user = await db.collection('users').findOne({ id: userId });
+        const photoObjectId = new ObjectId(photoId);
+
+        if (!user) {
+            return res.status(404).send({ message: 'User not found' });
+        }
+
+        let userUpdate, photoUpdate;
+
+        if (action === 'add') {
+            // 좋아요를 추가하는 경우
+            if (!user.liked_photoid.includes(photoObjectId)) {
+                userUpdate = { $push: { liked_photoid: photoObjectId } };
+                photoUpdate = { $inc: { 'metadata.likes': 1 } };
+            } else {
+                return res.status(400).send({ message: '이미 좋아요를 누른 사진입니다.' });
+            }
+        } else if (action === 'remove') {
+            // 좋아요를 제거하는 경우
+            if (user.liked_photoid.includes(photoObjectId)) {
+                userUpdate = { $pull: { liked_photoid: photoObjectId } };
+                photoUpdate = { $inc: { 'metadata.likes': -1 } };
+            } else {
+                return res.status(400).send({ message: '좋아요를 누르지 않은 사진입니다.' });
+            }
+        } else {
+            return res.status(400).send({ message: 'Invalid action' });
+        }
+
+        // 유저의 liked_photoid 업데이트
+        await db.collection('users').updateOne({ id: userId }, userUpdate);
+
+        // photo.files 컬렉션의 좋아요 수 업데이트
+        await db.collection('photo.files').updateOne({ _id: photoObjectId }, photoUpdate);
+
+        res.status(200).send({ message: `사진에 좋아요를 ${action === 'add' ? '추가' : '제거'}했습니다.` });
+    } catch (error) {
+        console.error('좋아요 처리 중 오류:', error);
+        res.status(500).send({ message: '서버 오류가 발생했습니다.' });
+    }
+});
+
 // 사진 삭제 처리
 app.get('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
     try {
@@ -590,5 +614,6 @@ app.get('/recommend', async (req, res) => {
         res.render('recommend', { address, latitude, longitude, userId, likedPlaceIds: [] });
     }
 });
+
 
 module.exports = app;
