@@ -29,6 +29,10 @@
             .then(result => {
                 if (result.success) {
                     console.log('요청 성공:', result);
+                var likesElement = element.parentNode.querySelector('.photo-likes');
+                var currentLikes = parseInt(likesElement.textContent, 10);
+                likesElement.textContent = isChecked ? currentLikes + 1 : currentLikes - 1;
+
                 } else {
                     console.error('요청 실패:', result);
                 }
