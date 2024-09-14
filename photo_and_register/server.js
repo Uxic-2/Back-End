@@ -370,6 +370,32 @@ app.get('/mypage/folder', ensureAuthenticated, async (req, res) => {
 });
 
 // ===== 사진 삭제 처리 =====
+
+app.get('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const file = await db.collection('photo.files').findOne({ filename: filename });
+
+        if (!file) {
+            return res.status(404).send('File not found');
+        }
+
+        await db.collection('photo.files').deleteOne({ _id: file._id });
+        await db.collection('photo.chunks').deleteMany({ files_id: file._id });
+
+        // 파일 삭제 후 사진 목록 가져오기
+        const photos = await db.collection('photo.files').find({}).toArray();
+        const photoDetails = photos.map(photo => ({
+            filename: photo.filename,
+        }));
+
+        res.render('upload', { message: 'File deleted successfully.', photos: photoDetails });
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        res.status(500).send('Error deleting file');
+    }
+});
+
 app.post('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
     try {
         const filename = req.params.filename;
@@ -379,25 +405,36 @@ app.post('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
         const file = await db.collection('photo.files').findOne({ filename: filename });
 
         if (!file) {
-            return res.status(404).send('파일을 찾을 수 없습니다.');
+            return res.status(404).send('File not found');
         }
 
         // 파일 삭제
         await db.collection('photo.files').deleteOne({ _id: file._id });
         await db.collection('photo.chunks').deleteMany({ files_id: file._id });
 
+        // 파일 _id를 ObjectId 타입으로 변환
+        const fileId = file._id;
+
         // 사용자 문서에서 해당 사진의 ID를 삭제
-        await db.collection('users').updateOne(
+        const updateResult = await db.collection('users').updateOne(
             { id: userId },
-            { $pull: { uploaded_photoid: file._id } }
+            { $pull: { uploaded_photoid: fileId } }
         );
+
+        if (updateResult.modifiedCount === 0) {
+            console.warn('No documents matched the query or no changes were made.');
+        }
 
         // 삭제 후 사진 목록 업데이트
         const photos = await db.collection('photo.files').find({}).toArray();
-        res.render('upload', { message: '파일이 성공적으로 삭제되었습니다.', photos });
+        const photoDetails = photos.map(photo => ({
+            filename: photo.filename,
+        }));
+
+        res.render('upload', { message: 'File deleted successfully.', photos: photoDetails });
     } catch (error) {
-        console.error('파일 삭제 오류:', error);
-        res.status(500).send('파일 삭제 오류');
+        console.error('Error deleting file:', error);
+        res.status(500).send('Error deleting file');
     }
 });
 
