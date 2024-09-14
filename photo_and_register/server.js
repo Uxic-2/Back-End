@@ -107,14 +107,22 @@ app.get('/', (req, res) => res.render('main.ejs'));
 // 업로드 페이지 렌더링
 app.get('/upload', ensureAuthenticated, async (req, res) => {
     try {
-        const photos = await db.collection('photo.files').find({}).toArray();
+        const userId = req.session.user.id;
+        
+        // Fetch the user's uploaded photo IDs
+        const user = await db.collection('users').findOne({ id: userId });
+        const uploadedPhotoIds = user.uploaded_photoid.map(id => new ObjectId(id));
+
+        // Fetch only the photos the user uploaded
+        const photos = await db.collection('photo.files').find({ _id: { $in: uploadedPhotoIds } }).toArray();
+
         res.render('upload', { 
             message: null,
             photos: photos
         });
     } catch (error) {
-        console.error('오류:', error);
-        res.status(500).send('서버 오류');
+        console.error('Error fetching photos:', error);
+        res.status(500).send('Server error');
     }
 });
 
