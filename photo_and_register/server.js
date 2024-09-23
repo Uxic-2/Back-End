@@ -18,10 +18,14 @@ app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors({
     origin: 'http://localhost:3000',
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true,  // credentials 설정 추가
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+    res.header('Access-Control-Allow-Credentials', 'true');
     req.db = db;
     req.bucket = bucket;
     next();
@@ -238,9 +242,11 @@ app.post('/member/login', async (req, res) => {
             return res.redirect('/member/login?error=' + encodeURIComponent('비밀번호가 잘못되었습니다.'));
         }
 
-        req.session.user = { id: user.id, name: user.name };
+        // 세션에 _id와 사용자 이름 저장
+        req.session.user = { _id: user._id, name: user.name };
 
-        res.redirect('/');
+        // 로그인 성공 시 JSON 형식으로 사용자 정보 응답
+        res.status(200).json({ user: { _id: user._id, name: user.name } });
     } catch (error) {
         console.error('로그인 중 오류:', error);
         res.status(500).send({ message: '서버 오류' });
@@ -300,33 +306,31 @@ app.get('/auth-status', (req, res) => {
     if (req.session && req.session.user) {
         res.json({ loggedIn: true, user: req.session.user });
     } else {
-        res.json({ loggedIn: false });
+        res.status(401).json({ loggedIn: false });
     }
 });
 
 // ===== 검색 페이지 =====
 app.get('/search', ensureAuthenticated, async (req, res) => {
-    const userId = req.session.user.id;
     try {
-        const user = await db.collection('users').findOne({ id: userId });
-        const likedPhotoIds = user ? user.liked_photoid.map(id => id.toString()) : [];
         const photos = await db.collection('photo.files').find({}).toArray();
         const photoDetails = photos.map(photo => ({
             _id: photo._id.toString(),
             filename: photo.filename,
-            address: photo.metadata ? photo.metadata.address : 'No address',
-            likes: photo.metadata ? photo.likes : 0,
-            timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
+            address: photo.metadata ? photo.metadata.address : '주소 없음',
+            likes: photo.metadata ? photo.metadata.likes : 0,
+            timestamp: photo.metadata ? photo.metadata.timestamp : '알 수 없음',
             gps: photo.metadata ? {
-                latitude: photo.metadata.gps ? photo.metadata.gps.latitude : 'Unknown',
-                longitude: photo.metadata.gps ? photo.metadata.gps.longitude : 'Unknown'
-            } : { latitude: 'Unknown', longitude: 'Unknown' },
+                latitude: photo.metadata.gps ? photo.metadata.gps.latitude : '알 수 없음',
+                longitude: photo.metadata.gps ? photo.metadata.gps.longitude : '알 수 없음'
+            } : { latitude: '알 수 없음', longitude: '알 수 없음' },
             uploadDate: photo.uploadDate.toISOString(),
         }));
-        res.render('search', { photos: photoDetails, userId, likedPhotoIds });
+
+        res.status(200).json({ photos: photoDetails });
     } catch (err) {
-        console.error('사진 가져오기 오류:', err);
-        res.render('search', { photos: [], userId: null, likedPhotoIds: [] });
+        console.error('사진 데이터 가져오기 오류:', err);
+        res.status(500).json({ error: '사진 데이터를 불러오는 중 오류가 발생했습니다.' });
     }
 });
 
