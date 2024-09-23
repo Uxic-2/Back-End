@@ -17,9 +17,10 @@ app.use(express.json());
 app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors({
-    origin: 'http://localhost:3000',
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type'],
+    origin: 'http://localhost:3000',  
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  
+    allowedHeaders: ['Content-Type', 'Authorization'], 
+    credentials: true  
 }));
 app.use((req, res, next) => {
     req.db = db;
@@ -238,9 +239,15 @@ app.post('/member/login', async (req, res) => {
             return res.redirect('/member/login?error=' + encodeURIComponent('비밀번호가 잘못되었습니다.'));
         }
 
+        // 세션에 유저 정보 저장
         req.session.user = { id: user.id, name: user.name };
 
-        res.redirect('/');
+        // 유저의 MongoDB _id 반환 및 콘솔에 출력
+        const userId = user._id.toString();
+        console.log('로그인 성공 - 유저 ID:', userId);  // 콘솔에 _id 출력
+
+        // _id 반환
+        res.status(200).json({ userId });
     } catch (error) {
         console.error('로그인 중 오류:', error);
         res.status(500).send({ message: '서버 오류' });
