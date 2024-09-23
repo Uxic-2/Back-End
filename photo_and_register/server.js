@@ -150,6 +150,7 @@ app.get('/upload', ensureAuthenticated, async (req, res) => {
     }
 });
 
+
 // 업로드 처리
 app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(uploadDir, req.file.filename);
