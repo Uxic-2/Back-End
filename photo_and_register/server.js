@@ -17,53 +17,29 @@ app.use(express.json());
 app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors({
-    origin: 'http://localhost:3000',  
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  
-    allowedHeaders: ['Content-Type', 'Authorization'], 
-    credentials: true  
+    origin: 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type'],
 }));
 app.use((req, res, next) => {
     req.db = db;
     req.bucket = bucket;
     next();
 });
-
-// ===== 인증 미들웨어 =====
-const ensureAuthenticated = async (req, res, next) => {
-    const userId = req.session.user ? req.session.user._id : null;  // 세션에서 _id 가져오기
-  
-    if (!userId) {
-      console.log("유저 _id가 없습니다. 인증 실패.");
-      return res.status(401).json({ message: '로그인이 필요합니다.' });
+// 로그인 확인 미들웨어
+const ensureAuthenticated = (req, res, next) => {
+    if (req.session && req.session.user) {
+        return next();
     }
-  
-    try {
-      const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
-  
-      if (!user) {
-        console.log("유효하지 않은 유저입니다.");
-        return res.status(401).json({ message: '유효하지 않은 유저입니다.' });
-      }
-  
-      req.user = user;  // 유저 정보를 요청 객체에 저장
-      next();
-    } catch (error) {
-      console.error("유저 인증 중 오류:", error);
-      res.status(500).json({ message: '서버 오류' });
-    }
+    res.redirect('/member/login?error=' + encodeURIComponent('로그인이 필요합니다.'));
 };
-  
 
 // 세션 설정
 app.use(session({
     secret: 'your_secret_key',
     resave: false,
     saveUninitialized: true,
-    cookie: {
-      secure: false,  // HTTPS가 아닐 경우 false로 설정
-      maxAge: 24 * 60 * 60 * 1000,  // 세션 만료 시간 설정 (1일)
-      sameSite: 'lax', 
-    }
+    cookie: { secure: false }
 }));
 
 // ===== 데이터베이스 연결 설정 =====
@@ -149,7 +125,6 @@ app.get('/upload', ensureAuthenticated, async (req, res) => {
         res.status(500).send('Server error');
     }
 });
-
 
 // 업로드 처리
 app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req, res) => {
@@ -241,7 +216,6 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
 });
 
 // ===== 로그인 및 회원가입 =====
-
 // 로그인 페이지 렌더링
 app.get('/member/login', (req, res) => {
     res.render('login.ejs', { error: req.query.error });
@@ -250,34 +224,29 @@ app.get('/member/login', (req, res) => {
 // 로그인 처리
 app.post('/member/login', async (req, res) => {
     const { id, pw } = req.body;
-  
+
     try {
-      const user = await db.collection('users').findOne({ id });  // id를 기반으로 유저 찾기
-  
-      if (!user) {
-        console.log("유저가 없습니다.");
-        return res.status(400).json({ message: '없는 아이디 입니다.' });
-      }
-  
-      const isMatch = await bcrypt.compare(pw, user.pw);
-  
-      if (!isMatch) {
-        console.log("비밀번호가 일치하지 않습니다.");
-        return res.status(400).json({ message: '비밀번호가 잘못되었습니다.' });
-      }
-  
-      // 세션에 MongoDB의 _id 저장
-      req.session.user = { _id: user._id, name: user.name };  // 세션에 _id 저장
-      console.log("세션에 유저 _id 정보 저장:", req.session.user);
-  
-      res.status(200).json({ userId: user._id.toString() });
+        const user = await db.collection('users').findOne({ id });
+
+        if (!user) {
+            return res.redirect('/member/login?error=' + encodeURIComponent('없는 아이디 입니다.'));
+        }
+
+        const isMatch = await bcrypt.compare(pw, user.pw);
+
+        if (!isMatch) {
+            return res.redirect('/member/login?error=' + encodeURIComponent('비밀번호가 잘못되었습니다.'));
+        }
+
+        req.session.user = { id: user.id, name: user.name };
+
+        res.redirect('/');
     } catch (error) {
-      console.error("로그인 중 오류 발생:", error);
-      res.status(500).json({ message: '서버 오류' });
+        console.error('로그인 중 오류:', error);
+        res.status(500).send({ message: '서버 오류' });
     }
-  }); 
-  
-  
+});
+
 // 로그아웃 처리
 app.get('/member/logout', (req, res) => {
     req.session.destroy(err => {
@@ -327,23 +296,13 @@ app.post('/member/register', async (req, res) => {
 });
 
 // 인증 상태 확인
-app.get('/auth-status/:userId', async (req, res) => {
-    const userId = req.params.userId;
-  
-    try {
-      const user = await db.collection('users').findOne({ _id: new ObjectId(userId) });
-  
-      if (user) {
-        res.json({ loggedIn: true, user });
-      } else {
+app.get('/auth-status', (req, res) => {
+    if (req.session && req.session.user) {
+        res.json({ loggedIn: true, user: req.session.user });
+    } else {
         res.json({ loggedIn: false });
-      }
-    } catch (error) {
-      console.error('유저 확인 중 오류:', error);
-      res.status(500).json({ loggedIn: false });
     }
-  });
-  
+});
 
 // ===== 검색 페이지 =====
 app.get('/search', ensureAuthenticated, async (req, res) => {
