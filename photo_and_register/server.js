@@ -290,7 +290,10 @@ app.post('/member/register', async (req, res) => {
             pw: hashedPassword,
             uploaded_photoid: [],
             liked_photoid: [],
-            liked_placeid: []
+            liked_placeid: [],
+            place_name: [],
+            latitude: [],
+            longitude: []
         });
 
         console.log('User registered:', result.insertedId);
@@ -363,21 +366,127 @@ app.get('/mypage', ensureAuthenticated, (req, res) => {
     res.render('mypage', { user: req.session.user });
 });
 
-// 내 여행 폴더 페이지
-app.get('/mypage/folder', ensureAuthenticated, async (req, res) => {
-    const userId = req.session.user.id;
+// 내 여행 폴더 페이지 렌더링 (좋아요 누른 장소 가져오기) -> log 찍기 아래것
+// 좋아요 누른 장소를 폴더에 보여주는 라우트
+// app.get('/mypage/folder', async (req, res) => {
+//     const userId = req.session.user.id; // 현재 로그인한 사용자 ID
+//     const user = await req.db.collection('users').findOne({ id: userId });
+//     const kakaoApiKey = 'f3ffd7ab3792e7e8c8231568de960d76'; // Kakao API Key
+
+//     try {
+//         if (!userId) {
+//             return res.status(401).send('Unauthorized'); // 사용자가 로그인하지 않은 경우
+//         }
+
+//         if (!user) {
+//             return res.status(404).send('User not found'); // 사용자를 찾지 못한 경우
+//         }
+
+//         // liked_placeid 배열을 사용하여 해당 장소 정보를 가져옵니다.
+//         const likedPlaceIds = user.liked_placeid || [];
+//         console.log('Liked Place IDs:', likedPlaceIds); // 확인용 로그
+
+//         // Kakao API를 통해 장소 정보를 가져오는 함수
+//         const fetchPlaceInfo = async (placeId) => {
+//             const url = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(placeId)}`;
+//             const response = await axios.get(url, {
+//                 headers: {
+//                     Authorization: `KakaoAK ${kakaoApiKey}`,
+//                 },
+//             });
+//             const placeInfo = response.data.documents[0];
+//             return placeInfo ? {
+//                 place_name: placeInfo.place_name,
+//                 address_name: placeInfo.address_name,
+//                 phone: placeInfo.phone || '없음', // 전화번호가 없으면 '없음'으로 표시
+//             } : null;
+//         };
+
+//         // 각 장소 ID에 대해 Kakao API 호출
+//         const likedPlaces = await Promise.all(
+//             likedPlaceIds.map(async (placeId) => {
+//                 const placeInfo = await fetchPlaceInfo(placeId);
+//                 return { ...placeInfo, liked_placeid: placeId }; // liked_placeid도 함께 반환
+//             })
+//         );
+
+//         // null 값 필터링
+//         const filteredLikedPlaces = likedPlaces.filter(place => place !== null);
+        
+//         res.render('folder', { likedPlaces: filteredLikedPlaces });
+//     } catch (error) {
+//         console.error('Error fetching liked places:', error);
+//         res.status(500).send('Internal Server Error');
+//     }
+// });
+
+
+app.get('/mypage/folder', async (req, res) => {
+    const userId = req.session.user.id; // 현재 로그인한 사용자 ID
+    const user = await req.db.collection('users').findOne({ id: userId });
+    const kakaoApiKey = 'f3ffd7ab3792e7e8c8231568de960d76'; // Kakao API Key
 
     try {
-        const user = await db.collection('users').findOne({ id: userId });
-
-        if (!user) {
-            return res.status(404).send('사용자를 찾을 수 없습니다.');
+        if (!userId) {
+            return res.status(401).send('Unauthorized'); // 사용자가 로그인하지 않은 경우
         }
 
-        res.render('folder', { user, travelFolders: user.travel_folders || [] });
+        if (!user) {
+            return res.status(404).send('User not found'); // 사용자를 찾지 못한 경우
+        }
+
+        // liked_placeid 배열을 사용하여 해당 장소 정보를 가져옵니다.
+        const likedPlaceIds = user.liked_placeid || [];
+        console.log('Liked Place IDs:', likedPlaceIds); // 확인용 로그
+
+        // Kakao API를 통해 장소 정보를 가져오는 함수
+        const fetchPlaceInfoById = async (placeId) => {
+            const url = `https://dapi.kakao.com/v2/local/search/category.json?category_group_code=CE7&sort=accuracy&location=127.0,37.0&page=1&size=1&placeId=${placeId}`;
+            try {
+                const response = await axios.get(url, {
+                    headers: {
+                        Authorization: `KakaoAK ${kakaoApiKey}`,
+                    },
+                });
+        
+                // API 응답 로그
+                console.log(`API Response for placeId ${placeId}:`, response.data.documents);
+        
+                if (response.data.documents.length === 0) {
+                    return null;
+                }
+        
+                const placeInfo = response.data.documents[0];
+        
+                return {
+                    place_name: placeInfo.place_name,
+                    address_name: placeInfo.address_name,
+                    phone: placeInfo.phone || '없음',
+                };
+            } catch (error) {
+                console.error(`Error fetching place info for placeId ${placeId}:`, error);
+                return null;
+            }
+        };
+        
+        // 각 장소 ID에 대해 Kakao API 호출
+        const likedPlaces = await Promise.all(
+            likedPlaceIds.map(async (placeId) => {
+                const placeInfo = await fetchPlaceInfoById(placeId);
+                return { ...placeInfo, liked_placeid: placeId };
+            })
+        );
+        
+        // null 값 필터링
+        const filteredLikedPlaces = likedPlaces.filter(place => place !== null);
+        
+        // 결과 확인 로그
+        console.log('Filtered Liked Places:', filteredLikedPlaces);
+        
+        res.render('folder', { likedPlaces: filteredLikedPlaces });     
     } catch (error) {
-        console.error('여행 폴더 가져오기 오류:', error);
-        res.status(500).send('여행 폴더 가져오기 오류');
+        console.error('Error fetching liked places:', error);
+        res.status(500).send('Internal Server Error');
     }
 });
 

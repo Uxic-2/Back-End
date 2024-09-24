@@ -3,37 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Photos Folders</title>
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <style>
-        .folder {
-            border: 2px dashed #007bff; /* 폴더 테두리 스타일 */
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            margin: 10px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .folder:hover {
-            background-color: #f8f9fa; /* hover 효과 */
-        }
-    </style>
+    <title>My Liked Places</title>
 </head>
 <body>
-    <div class="container">
-        <h1 class="mt-5">My Photos Folders</h1>
+    <h1>좋아요 한 장소</h1>
 
-        <div class="row">
-            <% for (let i = 0; i < 9; i++) { %> <!-- 9개의 폴더를 생성 -->
-                <div class="col-md-4 mb-4">
-                    <div class="folder" onclick="alert('폴더 <%= i + 1 %>를 클릭했습니다!')">
-                        <h5>Folder <%= i + 1 %></h5>
-                        <p>No photos uploaded yet.</p>
-                    </div>
-                </div>
-            <% } %>
-        </div>
-    </div>
+    <ul>
+        <% if (likedPlaces.length > 0) { %>
+          <% likedPlaces.forEach(function(place) { %>
+            <li>
+              <strong>Place Name:</strong> <%= place.place_name %><br>
+              <strong>Address:</strong> <%= place.address_name %><br>
+              <strong>Phone:</strong> <%= place.phone %>
+            </li>
+          <% }) %>
+        <% } else { %>
+          <li>No liked places found.</li>
+        <% } %>
+      </ul>
 </body>
 </html>
