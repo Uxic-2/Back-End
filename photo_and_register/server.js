@@ -8,7 +8,6 @@ const cors = require('cors');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const axios = require('axios'); // 주소를 위도와 경도로 변환하기 위한 axios 추가
-
 const app = express();
 
 // ===== 공통 미들웨어 설정 =====
@@ -18,14 +17,10 @@ app.set('view engine', 'ejs');
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors({
     origin: 'http://localhost:3000',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true,  // credentials 설정 추가
-    allowedHeaders: ['Content-Type', 'Authorization']
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type'],
 }));
-
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
-    res.header('Access-Control-Allow-Credentials', 'true');
     req.db = db;
     req.bucket = bucket;
     next();
@@ -130,7 +125,6 @@ app.get('/upload', ensureAuthenticated, async (req, res) => {
     }
 });
 
-// 업로드 처리
 app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(uploadDir, req.file.filename);
     const fileStream = fs.createReadStream(filePath);
@@ -157,6 +151,7 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
         let decimal = degrees + (minutes / 60) + (seconds / 3600);
         return (ref === 'S' || ref === 'W') ? -decimal : decimal;
     };
+
     const likes = parseInt(req.body.likes) || 0;
     const timestamp = exifData.exif ? exifData.exif.DateTimeOriginal : 'Unknown time';
     const gps = exifData.gps ? {
@@ -174,50 +169,30 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
         }
     }
 
+    // Get hashtags from the request body
+    const hashtags = req.body.hashtags ? req.body.hashtags.split(',').map(tag => tag.trim()) : [];
+
     const uploadStream = bucket.openUploadStream(req.body.filename || 'default_name' + path.extname(req.file.originalname), {
         metadata: {
             address: req.body.address,
             timestamp: timestamp,
-            gps: gps
-        }
-    });
-
-    uploadStream.on('finish', async () => {
-        try {
-            // 파일이 업로드된 후 임시 파일 삭제
-            fs.unlink(filePath, (err) => {
-                if (err) console.error('파일 삭제 오류:', err);
-            });
-
-            const uploadedFileId = uploadStream.id.toString();
-            const userId = req.session.user.id;
-            await db.collection('users').updateOne(
-                { id: userId },
-                { $push: { uploaded_photoid: uploadedFileId } }
-            );
-
-            res.redirect('/upload');
-        } catch (error) {
-            console.error('오류:', error);
-            if (!res.headersSent) {
-                res.status(500).send('서버 오류');
-            }
+            gps: gps,
+            hashtags: hashtags,  // Add hashtags to the metadata
+            likes: likes  // Include the likes field
         }
     });
 
     fileStream.pipe(uploadStream)
-        .on('finish', () => {
-            fs.unlink(filePath, (err) => {
-                if (err) console.error('파일 삭제 오류:', err);
-            });
+        .on('error', function (error) {
+            console.error('파일 업로드 오류:', error);
+            res.status(500).send('파일 업로드 중 오류가 발생했습니다.');
         })
-        .on('error', (err) => {
-            console.error('파일 업로드 오류:', err);
-            if (!res.headersSent) {
-                res.status(500).send('서버 오류');
-            }
+        .on('finish', function () {
+            console.log('파일 업로드 성공');
+            res.redirect('/upload');
         });
 });
+
 
 // ===== 로그인 및 회원가입 =====
 // 로그인 페이지 렌더링
@@ -242,11 +217,9 @@ app.post('/member/login', async (req, res) => {
             return res.redirect('/member/login?error=' + encodeURIComponent('비밀번호가 잘못되었습니다.'));
         }
 
-        // 세션에 _id와 사용자 이름 저장
-        req.session.user = { _id: user._id, name: user.name };
+        req.session.user = { id: user.id, name: user.name };
 
-        // 로그인 성공 시 JSON 형식으로 사용자 정보 응답
-        res.status(200).json({ user: { _id: user._id, name: user.name } });
+        res.redirect('/');
     } catch (error) {
         console.error('로그인 중 오류:', error);
         res.status(500).send({ message: '서버 오류' });
@@ -290,10 +263,7 @@ app.post('/member/register', async (req, res) => {
             pw: hashedPassword,
             uploaded_photoid: [],
             liked_photoid: [],
-            liked_placeid: [],
-            place_name: [],
-            latitude: [],
-            longitude: []
+            liked_placeid: []
         });
 
         console.log('User registered:', result.insertedId);
@@ -309,33 +279,51 @@ app.get('/auth-status', (req, res) => {
     if (req.session && req.session.user) {
         res.json({ loggedIn: true, user: req.session.user });
     } else {
-        res.status(401).json({ loggedIn: false });
+        res.json({ loggedIn: false });
     }
 });
 
 // ===== 검색 페이지 =====
 app.get('/search', ensureAuthenticated, async (req, res) => {
+    const userId = req.session.user.id;
+    const searchQuery = req.query.search || ''; // Get the search query from the request
+
     try {
-        const photos = await db.collection('photo.files').find({}).toArray();
+        const user = await db.collection('users').findOne({ id: userId });
+        const likedPhotoIds = user ? user.liked_photoid.map(id => id.toString()) : [];
+
+        // Fetch photos by filename or hashtags (case-insensitive)
+        const photos = await db.collection('photo.files').find({
+            $or: [
+                { filename: { $regex: searchQuery, $options: 'i' } }, // Search by filename
+                { 'metadata.hashtags': { $elemMatch: { $regex: searchQuery, $options: 'i' } } } // Search by individual hashtags in the array
+            ]
+        }).toArray();
+
+        // Map the photo details
         const photoDetails = photos.map(photo => ({
             _id: photo._id.toString(),
             filename: photo.filename,
-            address: photo.metadata ? photo.metadata.address : '주소 없음',
-            likes: photo.metadata ? photo.metadata.likes : 0,
-            timestamp: photo.metadata ? photo.metadata.timestamp : '알 수 없음',
+            address: photo.metadata ? photo.metadata.address : 'No address',
+            likes: photo.metadata ? photo.likes : 0,
+            hashtags: photo.metadata ? photo.metadata.hashtags : 'No hashtags',
+            timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
             gps: photo.metadata ? {
-                latitude: photo.metadata.gps ? photo.metadata.gps.latitude : '알 수 없음',
-                longitude: photo.metadata.gps ? photo.metadata.gps.longitude : '알 수 없음'
-            } : { latitude: '알 수 없음', longitude: '알 수 없음' },
+                latitude: photo.metadata.gps ? photo.metadata.gps.latitude : 'Unknown',
+                longitude: photo.metadata.gps ? photo.metadata.gps.longitude : 'Unknown'
+            } : { latitude: 'Unknown', longitude: 'Unknown' },
             uploadDate: photo.uploadDate.toISOString(),
         }));
 
-        res.status(200).json({ photos: photoDetails });
+        // Pass searchQuery to the EJS template to persist the search term in the input field
+        res.render('search', { photos: photoDetails, userId, likedPhotoIds, searchQuery });
     } catch (err) {
-        console.error('사진 데이터 가져오기 오류:', err);
-        res.status(500).json({ error: '사진 데이터를 불러오는 중 오류가 발생했습니다.' });
+        console.error('사진 가져오기 오류:', err);
+        res.render('search', { photos: [], userId: null, likedPhotoIds: [], searchQuery });
     }
 });
+
+
 
 // 이미지 제공
 app.get('/image/:filename', ensureAuthenticated, (req, res) => {
@@ -366,127 +354,21 @@ app.get('/mypage', ensureAuthenticated, (req, res) => {
     res.render('mypage', { user: req.session.user });
 });
 
-// 내 여행 폴더 페이지 렌더링 (좋아요 누른 장소 가져오기) -> log 찍기 아래것
-// 좋아요 누른 장소를 폴더에 보여주는 라우트
-// app.get('/mypage/folder', async (req, res) => {
-//     const userId = req.session.user.id; // 현재 로그인한 사용자 ID
-//     const user = await req.db.collection('users').findOne({ id: userId });
-//     const kakaoApiKey = 'f3ffd7ab3792e7e8c8231568de960d76'; // Kakao API Key
-
-//     try {
-//         if (!userId) {
-//             return res.status(401).send('Unauthorized'); // 사용자가 로그인하지 않은 경우
-//         }
-
-//         if (!user) {
-//             return res.status(404).send('User not found'); // 사용자를 찾지 못한 경우
-//         }
-
-//         // liked_placeid 배열을 사용하여 해당 장소 정보를 가져옵니다.
-//         const likedPlaceIds = user.liked_placeid || [];
-//         console.log('Liked Place IDs:', likedPlaceIds); // 확인용 로그
-
-//         // Kakao API를 통해 장소 정보를 가져오는 함수
-//         const fetchPlaceInfo = async (placeId) => {
-//             const url = `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(placeId)}`;
-//             const response = await axios.get(url, {
-//                 headers: {
-//                     Authorization: `KakaoAK ${kakaoApiKey}`,
-//                 },
-//             });
-//             const placeInfo = response.data.documents[0];
-//             return placeInfo ? {
-//                 place_name: placeInfo.place_name,
-//                 address_name: placeInfo.address_name,
-//                 phone: placeInfo.phone || '없음', // 전화번호가 없으면 '없음'으로 표시
-//             } : null;
-//         };
-
-//         // 각 장소 ID에 대해 Kakao API 호출
-//         const likedPlaces = await Promise.all(
-//             likedPlaceIds.map(async (placeId) => {
-//                 const placeInfo = await fetchPlaceInfo(placeId);
-//                 return { ...placeInfo, liked_placeid: placeId }; // liked_placeid도 함께 반환
-//             })
-//         );
-
-//         // null 값 필터링
-//         const filteredLikedPlaces = likedPlaces.filter(place => place !== null);
-        
-//         res.render('folder', { likedPlaces: filteredLikedPlaces });
-//     } catch (error) {
-//         console.error('Error fetching liked places:', error);
-//         res.status(500).send('Internal Server Error');
-//     }
-// });
-
-
-app.get('/mypage/folder', async (req, res) => {
-    const userId = req.session.user.id; // 현재 로그인한 사용자 ID
-    const user = await req.db.collection('users').findOne({ id: userId });
-    const kakaoApiKey = 'f3ffd7ab3792e7e8c8231568de960d76'; // Kakao API Key
+// 내 여행 폴더 페이지
+app.get('/mypage/folder', ensureAuthenticated, async (req, res) => {
+    const userId = req.session.user.id;
 
     try {
-        if (!userId) {
-            return res.status(401).send('Unauthorized'); // 사용자가 로그인하지 않은 경우
-        }
+        const user = await db.collection('users').findOne({ id: userId });
 
         if (!user) {
-            return res.status(404).send('User not found'); // 사용자를 찾지 못한 경우
+            return res.status(404).send('사용자를 찾을 수 없습니다.');
         }
 
-        // liked_placeid 배열을 사용하여 해당 장소 정보를 가져옵니다.
-        const likedPlaceIds = user.liked_placeid || [];
-        console.log('Liked Place IDs:', likedPlaceIds); // 확인용 로그
-
-        // Kakao API를 통해 장소 정보를 가져오는 함수
-        const fetchPlaceInfoById = async (placeId) => {
-            const url = `https://dapi.kakao.com/v2/local/search/category.json?category_group_code=CE7&sort=accuracy&location=127.0,37.0&page=1&size=1&placeId=${placeId}`;
-            try {
-                const response = await axios.get(url, {
-                    headers: {
-                        Authorization: `KakaoAK ${kakaoApiKey}`,
-                    },
-                });
-        
-                // API 응답 로그
-                console.log(`API Response for placeId ${placeId}:`, response.data.documents);
-        
-                if (response.data.documents.length === 0) {
-                    return null;
-                }
-        
-                const placeInfo = response.data.documents[0];
-        
-                return {
-                    place_name: placeInfo.place_name,
-                    address_name: placeInfo.address_name,
-                    phone: placeInfo.phone || '없음',
-                };
-            } catch (error) {
-                console.error(`Error fetching place info for placeId ${placeId}:`, error);
-                return null;
-            }
-        };
-        
-        // 각 장소 ID에 대해 Kakao API 호출
-        const likedPlaces = await Promise.all(
-            likedPlaceIds.map(async (placeId) => {
-                const placeInfo = await fetchPlaceInfoById(placeId);
-                return { ...placeInfo, liked_placeid: placeId };
-            })
-        );
-        
-        // null 값 필터링
-        const filteredLikedPlaces = likedPlaces.filter(place => place !== null);
-        
-        // 결과 확인 로그
-        console.log('Filtered Liked Places:', filteredLikedPlaces);
-        
-        res.render('folder', { likedPlaces: filteredLikedPlaces });     
+        res.render('folder', { user, travelFolders: user.travel_folders || [] });
     } catch (error) {
-        console.error('Error fetching liked places:', error);
-        res.status(500).send('Internal Server Error');
+        console.error('여행 폴더 가져오기 오류:', error);
+        res.status(500).send('여행 폴더 가져오기 오류');
     }
 });
 
