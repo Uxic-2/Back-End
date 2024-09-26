@@ -292,12 +292,15 @@ app.get('/search', ensureAuthenticated, async (req, res) => {
         const user = await db.collection('users').findOne({ id: userId });
         const likedPhotoIds = user ? user.liked_photoid.map(id => id.toString()) : [];
 
-        // Fetch all photos
+        // Fetch photos by filename or hashtags (case-insensitive)
         const photos = await db.collection('photo.files').find({
-            filename: { $regex: searchQuery, $options: 'i' } // Search by filename (case-insensitive)
+            $or: [
+                { filename: { $regex: searchQuery, $options: 'i' } }, // Search by filename
+                { 'metadata.hashtags': { $elemMatch: { $regex: searchQuery, $options: 'i' } } } // Search by individual hashtags in the array
+            ]
         }).toArray();
 
-        // Map the photo details as before
+        // Map the photo details
         const photoDetails = photos.map(photo => ({
             _id: photo._id.toString(),
             filename: photo.filename,
@@ -319,6 +322,7 @@ app.get('/search', ensureAuthenticated, async (req, res) => {
         res.render('search', { photos: [], userId: null, likedPhotoIds: [], searchQuery });
     }
 });
+
 
 
 // 이미지 제공
