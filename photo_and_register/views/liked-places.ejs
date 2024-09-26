@@ -1,0 +1,12 @@
+<h1>Liked Places</h1>
+<ul>
+    <% placeDetails.forEach(place => { %>
+        <li>
+            <h2><%= place.place_name %></h2>
+            <p>Address: <%= place.road_address %></p>
+            <p>Phone: <%= place.phone %></p>
+            <p>Description: <%= place.description %></p>
+            <!-- Add more fields as needed -->
+        </li>
+    <% }) %>
+</ul>
