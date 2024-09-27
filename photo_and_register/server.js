@@ -19,6 +19,7 @@ app.use(cors({
     origin: 'http://localhost:3000',
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type'],
+    credentials: true
 }));
 app.use((req, res, next) => {
     req.db = db;
@@ -196,11 +197,6 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
 
 // ===== 로그인 및 회원가입 =====
 // 로그인 페이지 렌더링
-app.get('/member/login', (req, res) => {
-    res.render('login.ejs', { error: req.query.error });
-});
-
-// 로그인 처리
 app.post('/member/login', async (req, res) => {
     const { id, pw } = req.body;
 
@@ -219,7 +215,8 @@ app.post('/member/login', async (req, res) => {
 
         req.session.user = { id: user.id, name: user.name };
 
-        res.redirect('/');
+        // Send the user data back to the client
+        res.status(200).send({ user });  // Make sure this sends valid user data
     } catch (error) {
         console.error('로그인 중 오류:', error);
         res.status(500).send({ message: '서버 오류' });
