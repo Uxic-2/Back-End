@@ -328,7 +328,7 @@
                 checkbox.type = 'checkbox';
                 checkbox.checked = likedPlaceIds.includes(place.id);
                 checkbox.addEventListener('click', function() {
-                    handleCheckboxClick(place.id, userId, checkbox.checked);
+                    handleCheckboxClick(place.id, userId, checkbox.checked,place.place_name);
                 });
 
                 itemEl.appendChild(checkbox);
@@ -352,11 +352,12 @@
         }
 
         // 체크박스 클릭 이벤트 처리 함수
-        function handleCheckboxClick(placeId, userId, isChecked) {
+        function handleCheckboxClick(placeId, userId, isChecked, place_name) {
             var url = isChecked ? '/places/add' : '/places/remove';
             var data = {
                 placeId: placeId,
-                userId: userId
+                userId: userId,
+                place_name: place_name
             };
 
             fetch(url, {
