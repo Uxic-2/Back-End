@@ -13,8 +13,9 @@
           <% likedPlaces.forEach(function(place) { %>
             <li>
               <strong>Place Name:</strong> <%= place.place_name %><br>
-              <strong>Address:</strong> <%= place.address_name %><br>
-              <strong>Phone:</strong> <%= place.phone %>
+              <strong>링크 방문하기:</strong> <a href="https://place.map.kakao.com/<%= place.placeId %>" target="_blank">https://place.map.kakao.com/<%= place.placeId %></a><br><br>
+
+              <!-- address_name 및 phone 추가하려면 여기에 더 추가하세요 -->
             </li>
           <% }) %>
         <% } else { %>
