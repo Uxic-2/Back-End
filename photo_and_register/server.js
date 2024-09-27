@@ -125,6 +125,7 @@ app.get('/upload', ensureAuthenticated, async (req, res) => {
     }
 });
 
+// 업로드 처리
 app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req, res) => {
     const filePath = path.join(uploadDir, req.file.filename);
     const fileStream = fs.createReadStream(filePath);
@@ -151,7 +152,6 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
         let decimal = degrees + (minutes / 60) + (seconds / 3600);
         return (ref === 'S' || ref === 'W') ? -decimal : decimal;
     };
-
     const likes = parseInt(req.body.likes) || 0;
     const timestamp = exifData.exif ? exifData.exif.DateTimeOriginal : 'Unknown time';
     const gps = exifData.gps ? {
@@ -169,30 +169,50 @@ app.post('/upload', ensureAuthenticated, upload.single('uploadImg'), async (req,
         }
     }
 
-    // Get hashtags from the request body
-    const hashtags = req.body.hashtags ? req.body.hashtags.split(',').map(tag => tag.trim()) : [];
-
     const uploadStream = bucket.openUploadStream(req.body.filename || 'default_name' + path.extname(req.file.originalname), {
         metadata: {
             address: req.body.address,
             timestamp: timestamp,
-            gps: gps,
-            hashtags: hashtags,  // Add hashtags to the metadata
-            likes: likes  // Include the likes field
+            gps: gps
+        }
+    });
+
+    uploadStream.on('finish', async () => {
+        try {
+            // 파일이 업로드된 후 임시 파일 삭제
+            fs.unlink(filePath, (err) => {
+                if (err) console.error('파일 삭제 오류:', err);
+            });
+
+            const uploadedFileId = uploadStream.id.toString();
+            const userId = req.session.user.id;
+            await db.collection('users').updateOne(
+                { id: userId },
+                { $push: { uploaded_photoid: uploadedFileId } }
+            );
+
+            res.redirect('/upload');
+        } catch (error) {
+            console.error('오류:', error);
+            if (!res.headersSent) {
+                res.status(500).send('서버 오류');
+            }
         }
     });
 
     fileStream.pipe(uploadStream)
-        .on('error', function (error) {
-            console.error('파일 업로드 오류:', error);
-            res.status(500).send('파일 업로드 중 오류가 발생했습니다.');
+        .on('finish', () => {
+            fs.unlink(filePath, (err) => {
+                if (err) console.error('파일 삭제 오류:', err);
+            });
         })
-        .on('finish', function () {
-            console.log('파일 업로드 성공');
-            res.redirect('/upload');
+        .on('error', (err) => {
+            console.error('파일 업로드 오류:', err);
+            if (!res.headersSent) {
+                res.status(500).send('서버 오류');
+            }
         });
 });
-
 
 // ===== 로그인 및 회원가입 =====
 // 로그인 페이지 렌더링
@@ -263,7 +283,9 @@ app.post('/member/register', async (req, res) => {
             pw: hashedPassword,
             uploaded_photoid: [],
             liked_photoid: [],
-            liked_placeid: []
+            liked_placeid: [],
+            latitude: [],
+            longitude: []
         });
 
         console.log('User registered:', result.insertedId);
@@ -286,27 +308,15 @@ app.get('/auth-status', (req, res) => {
 // ===== 검색 페이지 =====
 app.get('/search', ensureAuthenticated, async (req, res) => {
     const userId = req.session.user.id;
-    const searchQuery = req.query.search || ''; // Get the search query from the request
-
     try {
         const user = await db.collection('users').findOne({ id: userId });
         const likedPhotoIds = user ? user.liked_photoid.map(id => id.toString()) : [];
-
-        // Fetch photos by filename or hashtags (case-insensitive)
-        const photos = await db.collection('photo.files').find({
-            $or: [
-                { filename: { $regex: searchQuery, $options: 'i' } }, // Search by filename
-                { 'metadata.hashtags': { $elemMatch: { $regex: searchQuery, $options: 'i' } } } // Search by individual hashtags in the array
-            ]
-        }).toArray();
-
-        // Map the photo details
+        const photos = await db.collection('photo.files').find({}).toArray();
         const photoDetails = photos.map(photo => ({
             _id: photo._id.toString(),
             filename: photo.filename,
             address: photo.metadata ? photo.metadata.address : 'No address',
             likes: photo.metadata ? photo.likes : 0,
-            hashtags: photo.metadata ? photo.metadata.hashtags : 'No hashtags',
             timestamp: photo.metadata ? photo.metadata.timestamp : 'Unknown',
             gps: photo.metadata ? {
                 latitude: photo.metadata.gps ? photo.metadata.gps.latitude : 'Unknown',
@@ -314,16 +324,12 @@ app.get('/search', ensureAuthenticated, async (req, res) => {
             } : { latitude: 'Unknown', longitude: 'Unknown' },
             uploadDate: photo.uploadDate.toISOString(),
         }));
-
-        // Pass searchQuery to the EJS template to persist the search term in the input field
-        res.render('search', { photos: photoDetails, userId, likedPhotoIds, searchQuery });
+        res.render('search', { photos: photoDetails, userId, likedPhotoIds });
     } catch (err) {
         console.error('사진 가져오기 오류:', err);
-        res.render('search', { photos: [], userId: null, likedPhotoIds: [], searchQuery });
+        res.render('search', { photos: [], userId: null, likedPhotoIds: [] });
     }
 });
-
-
 
 // 이미지 제공
 app.get('/image/:filename', ensureAuthenticated, (req, res) => {
@@ -355,22 +361,24 @@ app.get('/mypage', ensureAuthenticated, (req, res) => {
 });
 
 // 내 여행 폴더 페이지
-app.get('/mypage/folder', ensureAuthenticated, async (req, res) => {
-    const userId = req.session.user.id;
-
+app.get('/mypage/folder', async (req, res) => {
     try {
+        const userId = req.session.user.id;
         const user = await db.collection('users').findOne({ id: userId });
 
-        if (!user) {
-            return res.status(404).send('사용자를 찾을 수 없습니다.');
-        }
+        // 사용자 좋아요 장소 목록 가져오기 (object를 배열로 변환)
+        const likedPlaces = Object.keys(user.place_names).map(key => ({
+            placeId: key,
+            place_name: user.place_names[key],
+        }));
 
-        res.render('folder', { user, travelFolders: user.travel_folders || [] });
+        res.render('folder', { likedPlaces }); // EJS로 데이터 전달
     } catch (error) {
-        console.error('여행 폴더 가져오기 오류:', error);
-        res.status(500).send('여행 폴더 가져오기 오류');
+        console.error(error);
+        res.status(500).send('Internal Server Error');
     }
 });
+
 
 // ===== 사진 삭제 처리 =====
 
@@ -443,15 +451,14 @@ app.post('/delete-image/:filename', ensureAuthenticated, async (req, res) => {
 
 // ===== 좋아요 기능 =====
 
-// 장소 좋아요 추가 및 삭제
-
+// 장소 좋아요 추가 및 삭제(name만 가져오는거 아래는)
 app.post('/places/:action', ensureAuthenticated, async (req, res) => {
-    const { placeId } = req.body;
+    const { placeId, place_name } = req.body; 
     const action = req.params.action;
     const userId = req.session.user.id;
 
-    if (!placeId || !action || !userId) {
-        return res.status(400).send({ message: 'placeId, userId, action이 필요합니다.' });
+    if (!placeId || !place_name || !action || !userId) {
+        return res.status(400).send({ message: 'placeId, place_name, userId, action이 필요합니다.' });
     }
 
     try {
@@ -465,11 +472,19 @@ app.post('/places/:action', ensureAuthenticated, async (req, res) => {
 
         if (action === 'add') {
             if (!user.liked_placeid.includes(placeId)) {
-                update = { $push: { liked_placeid: placeId } };
+                // liked_placeid에 placeId 추가하고, place_name도 db에 저장
+                update = { 
+                    $push: { liked_placeid: placeId },
+                    $set: { [`place_names.${placeId}`]: place_name } // place_names 객체에 place_name 추가
+                };
             }
         } else if (action === 'remove') {
             if (user.liked_placeid.includes(placeId)) {
-                update = { $pull: { liked_placeid: placeId } };
+                // liked_placeid에서 placeId 제거하고, place_name도 삭제
+                update = { 
+                    $pull: { liked_placeid: placeId },
+                    $unset: { [`place_names.${placeId}`]: "" } // place_names에서 place_name 제거
+                };
             }
         } else {
             return res.status(400).send({ message: '유효하지 않은 액션입니다.' });
@@ -487,6 +502,7 @@ app.post('/places/:action', ensureAuthenticated, async (req, res) => {
         return res.status(500).send({ message: '서버 내부 오류' });
     }
 });
+
 
 // 사진 좋아요 추가 및 삭제
 app.post('/photos/:action', async (req, res) => {
