@@ -66,9 +66,8 @@
                         <label>
                             <input 
                                 type="checkbox" 
-                                checkbox.checked = likedPlaceIds.includes(place.id);
                                 onchange="handleCheckboxChange('<%= photo._id.toString() %>', this.checked, this)" 
-                                <% if (likedPhotoIds.includes(photo._id.toString())) { %>checked<% } %>> <!-- 좋아요 상태에 따라 체크 여부 결정 -->
+                                <% if (likedPhotoIds.includes(photo._id.toString())) { %>checked<% } %>>
                             좋아요
                         </label>
                     </div>

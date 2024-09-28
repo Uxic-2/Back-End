@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Liked Places</title>
+    <style>
+        /* 이미지 크기를 조정하기 위한 CSS */
+        .photo-img {
+            width: 150px;  /* 너비를 150px로 설정 */
+            height: auto;  /* 비율 유지하면서 높이 자동 설정 */
+        }
+    </style>
 </head>
 <body>
     <h1>좋아요 한 장소</h1>
@@ -21,6 +28,14 @@
         <% } else { %>
           <li>No liked places found.</li>
         <% } %>
+
+        <% likedPhotos.forEach(function(photo) { %>
+          <li>
+              <p><strong>Filename:</strong> <%= photo.filename %></p> <!-- 파일명 출력 -->
+              <img class="photo-img" src="/image/<%= photo.filename %>" alt="<%= photo.filename %>">
+              <p><strong>Likes:</strong> <%= photo.likes %></p> <!-- 좋아요 수 출력 -->
+          </li>
+        <% }); %>
       </ul>
 </body>
 </html>
