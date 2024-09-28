@@ -19,6 +19,7 @@ app.use(cors({
     origin: 'http://localhost:3000',
     methods: ['GET', 'POST'],
     allowedHeaders: ['Content-Type'],
+    credentials: true
 }));
 app.use((req, res, next) => {
     req.db = db;
@@ -220,7 +221,6 @@ app.get('/member/login', (req, res) => {
     res.render('login.ejs', { error: req.query.error });
 });
 
-// 로그인 처리
 app.post('/member/login', async (req, res) => {
     const { id, pw } = req.body;
 
@@ -239,7 +239,8 @@ app.post('/member/login', async (req, res) => {
 
         req.session.user = { id: user.id, name: user.name };
 
-        res.redirect('/');
+        // Send the user data back to the client
+        res.status(200).send({ user });  // Make sure this sends valid user data
     } catch (error) {
         console.error('로그인 중 오류:', error);
         res.status(500).send({ message: '서버 오류' });
@@ -396,7 +397,7 @@ app.get('/mypage/folder', async (req, res) => {
                                     .find({_id: { $in: likedPhotoIds.map(id => new ObjectId(id)) } })
                                     .toArray();
 
-        res.render('folder', { likedPlaces, likedPhotos }); // EJS로 데이터 전달
+        res.render('folder', { likedPlaces, likedPhotos }); // 데이터 전달
     } catch (error) {
         console.error(error);
         res.status(500).send('Internal Server Error');

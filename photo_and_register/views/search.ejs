@@ -7,38 +7,36 @@
     <link rel="stylesheet" href="/styles/search.css">
     <script>
         var userId = '<%= userId %>';
-        var likedPhotoIds = JSON.parse('<%= JSON.stringify(likedPhotoIds) %>'); // 문자열로 전달된 likedPhotoIds를 배열로 변환
+        var likedPhotoIds = JSON.parse('<%= JSON.stringify(likedPhotoIds) %>');
 
         function handleCheckboxChange(photoId, isChecked, element) {
-    const url = isChecked ? '/photos/add' : '/photos/remove';
-    const data = { photoId: photoId }; // action은 URL에서 처리하므로 제거
-    
+            const url = isChecked ? '/photos/add' : '/photos/remove';
+            const data = { photoId: photoId };
 
-    fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-    })
-    .then(response => response.json())
-    .then(result => {
-        if (result.message) {
-            const likesElement = element.closest('.card-meta').querySelector('.photo-likes');
-            const currentLikes = parseInt(likesElement.textContent, 10);
-            likesElement.textContent = isChecked ? currentLikes + 1 : currentLikes - 1;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.message) {
+                    const likesElement = element.closest('.card-meta').querySelector('.photo-likes');
+                    const currentLikes = parseInt(likesElement.textContent, 10);
+                    likesElement.textContent = isChecked ? currentLikes + 1 : currentLikes - 1;
 
-                  // 좋아요 상태를 변경했으므로 likedPhotoIds 배열을 업데이트
-                  if (isChecked) {
-                    likedPhotoIds.push(photoId); // 좋아요 추가 시 배열에 photoId 추가
-                } else {
-                    likedPhotoIds = likedPhotoIds.filter(id => id !== photoId); // 좋아요 해제 시 배열에서 photoId 제거
+                    if (isChecked) {
+                        likedPhotoIds.push(photoId);
+                    } else {
+                        likedPhotoIds = likedPhotoIds.filter(id => id !== photoId);
+                    }
                 }
-            }
-        })
-        
-    .catch(error => console.error('Error:', error));
-}
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
         function isLiked(photoId) {
             return likedPhotoIds.includes(photoId);
         }
@@ -46,6 +44,13 @@
 </head>
 <body>
     <h1>검색 결과</h1>
+
+    <!-- Search form -->
+    <form method="GET" action="/search">
+        <input type="text" name="search" placeholder="사진 이름 또는 해시태그 검색..." value="<%= searchQuery %>">
+        <button type="submit">검색</button>
+    </form>
+
     <div class="container">
         <% photos.forEach(function(photo) { %>
             <div class="card">
@@ -60,7 +65,9 @@
                     </p>
                     <div class="card-meta">
                         <p>업로드 시간: <%= photo.uploadDate %></p>
-                        <p>좋아요 수: <span class="photo-likes"><%= photo.likes %></span></p> <!-- 좋아요 수 -->
+                        <p>좋아요 수: <span class="photo-likes"><%= photo.likes %></span></p>
+                        <!-- 해시태그 출력 부분 -->
+                        <p>해시태그: <%= Array.isArray(photo.hashtags) ? photo.hashtags.join(', ') : photo.hashtags %></p>
                         <p>타임스탬프: <%= photo.timestamp %></p>
                         <p>GPS: 위도 <%= photo.gps.latitude %>, 경도 <%= photo.gps.longitude %></p>
                         <label>
@@ -74,7 +81,7 @@
                 </div>
             </div>
         <% }); %>
-        
     </div>
+    
 </body>
 </html>
